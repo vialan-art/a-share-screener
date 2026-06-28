@@ -1,0 +1,33 @@
+[tool.poetry]
+name = "a-share-screener"
+version = "0.1.0"
+description = "A股选股研究系统 - 数据驱动、可扩展、教学友好"
+authors = ["huangzihao"]
+readme = "README.md"
+packages = [{include = "backend"}]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+fastapi = "^0.111.0"
+uvicorn = {extras = ["standard"], version = "^0.30.0"}
+pydantic = "^2.7.0"
+pydantic-settings = "^2.3.0"
+sqlalchemy = "^2.0.30"
+alembic = "^1.13.0"
+pandas = "^2.2.0"
+numpy = "^1.26.0"
+akshare = "^1.14.0"
+httpx = "^0.27.0"
+python-dotenv = "^1.0.0"
+schedule = "^1.2.0"
+python-multipart = "^0.0.9"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.2.0"
+black = "^24.4.0"
+flake8 = "^7.1.0"
+mypy = "^1.10.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

@@ -1,0 +1,46 @@
+services:
+  backend:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.backend
+    container_name: screener-backend
+    restart: unless-stopped
+    volumes:
+      - ../data:/app/data
+      - ../backend/.env:/app/backend/.env:ro
+    environment:
+      - DATABASE_URL=sqlite:///./data/screener.db
+    networks:
+      - screener-network
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.frontend
+    container_name: screener-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - screener-network
+
+  scheduler:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.backend
+    container_name: screener-scheduler
+    restart: unless-stopped
+    volumes:
+      - ../data:/app/data
+      - ../backend/.env:/app/backend/.env:ro
+    command: ["python", "-m", "backend.scheduler.daily_job"]
+    depends_on:
+      - backend
+    networks:
+      - screener-network
+
+networks:
+  screener-network:
+    driver: bridge
