@@ -20,8 +20,11 @@ def health_check():
 
 @router.post("/run")
 def run_pipeline(db: Session = Depends(get_db)):
-    """手动触发选股流程。"""
-    pipeline = ScreenerPipeline()
+    """手动触发选股流程。默认使用 mock 数据源保证稳定性，
+    生产环境可通过环境变量切换为 akshare。"""
+    import os
+    provider_name = os.environ.get("SCREENER_PROVIDER", "mock")
+    pipeline = ScreenerPipeline(provider_name=provider_name)
     result = pipeline.run(db, max_stocks=500)
     return result
 

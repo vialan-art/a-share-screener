@@ -16,6 +16,14 @@ class Settings(BaseSettings):
 
     database_url: str = "sqlite:///./data/screener.db"
 
+    @property
+    def database_path(self) -> str:
+        """从 DATABASE_URL 中提取数据库文件路径。"""
+        url = self.database_url
+        if url.startswith("sqlite:///"):
+            return url.replace("sqlite:///", "")
+        return url
+
     ai_advisor_enabled: bool = False
     ai_advisor_api_url: str = "https://api.openai.com/v1/chat/completions"
     ai_advisor_api_key: str = ""

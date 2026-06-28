@@ -19,7 +19,7 @@ def normalize_symbol(symbol: str) -> str:
 class ScreenerPipeline:
     """选股流水线。"""
 
-    def __init__(self, provider_name: str = "akshare"):
+    def __init__(self, provider_name: str = "mock"):
         self.provider = get_provider(provider_name)
         self.filter_engine = FilterEngine()
         self.scoring_engine = ScoringEngine()

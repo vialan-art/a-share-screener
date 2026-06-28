@@ -2,11 +2,15 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 from backend.core.config import get_settings
+import os
 
 settings = get_settings()
 
+# 确保数据库文件所在目录存在
+db_path = settings.database_path
+os.makedirs(os.path.dirname(os.path.abspath(db_path)), exist_ok=True)
+
 # SQLite 在 FastAPI 多线程下需要 check_same_thread=False
-# connect_args 只对 SQLite 有效，对其他数据库不会生效
 engine = create_engine(
     settings.database_url,
     connect_args={"check_same_thread": False},

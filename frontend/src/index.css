@@ -1,7 +1,125 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Noto+Sans+SC:wght@300;400;500;700&family=Noto+Serif+SC:wght@300;400;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-body {
-  @apply bg-gray-50 text-gray-900;
+:root {
+  --bg-primary: #f7f6f4;
+  --bg-secondary: #eeedea;
+  --bg-card: rgba(255, 255, 255, 0.72);
+  --text-primary: #2c2a26;
+  --text-secondary: #6e665c;
+  --text-muted: #a69f93;
+  --accent-moss: #6b7b5f;
+  --accent-rust: #9c6b4f;
+  --border-subtle: rgba(44, 42, 38, 0.08);
 }
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply bg-ink-50 text-sumi font-sans antialiased;
+  background-image:
+    radial-gradient(ellipse at top, rgba(107, 123, 95, 0.03) 0%, transparent 50%),
+    url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.025'/%3E%3C/svg%3E");
+  background-attachment: fixed;
+}
+
+/* 滚动条 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(44, 42, 38, 0.15);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(44, 42, 38, 0.25);
+}
+
+/* 选中文本 */
+::selection {
+  background: rgba(107, 123, 95, 0.2);
+  color: #2c2a26;
+}
+
+/* 玻璃拟态卡片 */
+.glass-card {
+  @apply bg-white/70 backdrop-blur-xl border border-white/40;
+  box-shadow:
+    0 1px 2px rgba(44, 42, 38, 0.02),
+    0 4px 24px rgba(44, 42, 38, 0.04);
+}
+
+/* 优雅表格 */
+.elegant-table {
+  @apply w-full text-sm border-collapse;
+}
+
+.elegant-table th {
+  @apply text-left font-medium text-ink-500 tracking-wide;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.elegant-table td {
+  @apply border-t border-ink-200/60;
+}
+
+.elegant-table tr {
+  @apply transition-colors duration-300;
+}
+
+.elegant-table tbody tr:hover {
+  @apply bg-ink-100/50;
+}
+
+/* 按钮 */
+.btn-primary {
+  @apply px-5 py-2.5 bg-sumi text-ink-50 font-medium text-sm tracking-wide
+         rounded-md transition-all duration-300 hover:bg-ink-800
+         focus:outline-none focus:ring-2 focus:ring-moss/30;
+}
+
+.btn-secondary {
+  @apply px-5 py-2.5 border border-ink-300 text-ink-700 font-medium text-sm tracking-wide
+         rounded-md transition-all duration-300 hover:bg-ink-100 hover:border-ink-400
+         focus:outline-none focus:ring-2 focus:ring-moss/20;
+}
+
+/* 分隔线 */
+.divider {
+  @apply h-px w-full bg-gradient-to-r from-transparent via-ink-300/50 to-transparent;
+}
+
+/* 分数徽章 */
+.score-badge {
+  @apply inline-flex items-center justify-center px-2 py-0.5 rounded text-xs font-mono font-medium;
+}
+
+/* 渐入动画 */
+.animate-stagger > * {
+  animation: slideUp 0.5s ease-out backwards;
+}
+
+.animate-stagger > *:nth-child(1) { animation-delay: 0ms; }
+.animate-stagger > *:nth-child(2) { animation-delay: 60ms; }
+.animate-stagger > *:nth-child(3) { animation-delay: 120ms; }
+.animate-stagger > *:nth-child(4) { animation-delay: 180ms; }
+.animate-stagger > *:nth-child(5) { animation-delay: 240ms; }
+.animate-stagger > *:nth-child(6) { animation-delay: 300ms; }
