@@ -7,7 +7,7 @@
 :root {
   --bg-primary: #f7f6f4;
   --bg-secondary: #eeedea;
-  --bg-card: rgba(255, 255, 255, 0.72);
+  --bg-card: rgba(255, 255, 255, 0.55);
   --text-primary: #2c2a26;
   --text-secondary: #6e665c;
   --text-muted: #a69f93;
@@ -27,8 +27,10 @@ html {
 body {
   @apply bg-ink-50 text-sumi font-sans antialiased;
   background-image:
-    radial-gradient(ellipse at top, rgba(107, 123, 95, 0.03) 0%, transparent 50%),
-    url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.025'/%3E%3C/svg%3E");
+    radial-gradient(ellipse at 20% 0%, rgba(156, 107, 79, 0.04) 0%, transparent 45%),
+    radial-gradient(ellipse at 80% 100%, rgba(107, 123, 95, 0.04) 0%, transparent 45%),
+    url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.028'/%3E%3C/svg%3E"),
+    theme('backgroundImage.marble');
   background-attachment: fixed;
 }
 
@@ -57,12 +59,63 @@ body {
   color: #2c2a26;
 }
 
-/* 玻璃拟态卡片 */
+/* 液态玻璃卡片 */
 .glass-card {
-  @apply bg-white/70 backdrop-blur-xl border border-white/40;
+  @apply relative bg-white/55 backdrop-blur-2xl border border-white/50;
   box-shadow:
-    0 1px 2px rgba(44, 42, 38, 0.02),
-    0 4px 24px rgba(44, 42, 38, 0.04);
+    inset 0 1px 1px rgba(255, 255, 255, 0.7),
+    inset 0 -1px 1px rgba(44, 42, 38, 0.02),
+    0 2px 4px rgba(44, 42, 38, 0.02),
+    0 12px 40px -12px rgba(44, 42, 38, 0.08);
+  overflow: hidden;
+}
+
+.glass-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.5) 0%,
+    rgba(255, 255, 255, 0.1) 40%,
+    rgba(255, 255, 255, 0.05) 60%,
+    rgba(255, 255, 255, 0.25) 100%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* 大理石纹理强调卡片 */
+.marble-card {
+  @apply relative bg-white/60 backdrop-blur-xl border border-white/45;
+  background-image:
+    url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='m'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.018' numOctaves='4' seed='3'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncR type='linear' slope='0.12' intercept='0.94'/%3E%3CfeFuncG type='linear' slope='0.12' intercept='0.92'/%3E%3CfeFuncB type='linear' slope='0.12' intercept='0.90'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23m)' opacity='0.35'/%3E%3C/svg%3E");
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.8),
+    0 4px 6px -1px rgba(44, 42, 38, 0.02),
+    0 18px 48px -12px rgba(44, 42, 38, 0.09);
+  overflow: hidden;
+}
+
+.marble-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    160deg,
+    rgba(255, 255, 255, 0.45) 0%,
+    rgba(255, 255, 255, 0) 60%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* 内容始终位于纹理之上 */
+.glass-card > *,
+.marble-card > * {
+  position: relative;
+  z-index: 1;
 }
 
 /* 优雅表格 */
@@ -94,12 +147,17 @@ body {
   @apply px-5 py-2.5 bg-sumi text-ink-50 font-medium text-sm tracking-wide
          rounded-md transition-all duration-300 hover:bg-ink-800
          focus:outline-none focus:ring-2 focus:ring-moss/30;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 4px 14px -4px rgba(44, 42, 38, 0.2);
 }
 
 .btn-secondary {
   @apply px-5 py-2.5 border border-ink-300 text-ink-700 font-medium text-sm tracking-wide
          rounded-md transition-all duration-300 hover:bg-ink-100 hover:border-ink-400
          focus:outline-none focus:ring-2 focus:ring-moss/20;
+  background: rgba(255, 255, 255, 0.35);
+  backdrop-filter: blur(12px);
 }
 
 /* 分隔线 */

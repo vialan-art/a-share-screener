@@ -21,19 +21,26 @@ function NavItem({ to, icon: Icon, label, labelEn, isActive }: typeof navItems[0
     <NavLink
       to={to}
       className={() =>
-        `group relative flex items-center gap-4 px-5 py-4 rounded-xl transition-all duration-500 ${
+        `group relative flex items-center gap-4 px-5 py-4 rounded-xl transition-all duration-500 overflow-hidden ${
           isActive
             ? 'bg-sumi text-ink-50 shadow-soft'
-            : 'text-ink-500 hover:bg-ink-100/60 hover:text-sumi'
+            : 'text-ink-500 hover:bg-white/40 hover:text-sumi'
         }`
       }
     >
+      <span className={`absolute inset-0 rounded-xl transition-opacity duration-500 ${
+        isActive ? 'opacity-0' : 'opacity-0 group-hover:opacity-100'
+      }`}
+        style={{
+          background: 'linear-gradient(135deg, rgba(255,255,255,0.6) 0%, rgba(255,255,255,0.1) 100%)',
+        }}
+      />
       <Icon
         size={18}
         strokeWidth={1.5}
-        className="transition-transform duration-500 group-hover:scale-110"
+        className="relative z-10 transition-transform duration-500 group-hover:scale-110"
       />
-      <div className="flex flex-col">
+      <div className="relative z-10 flex flex-col">
         <span className="text-sm font-medium tracking-wide">{label}</span>
         <span className={`text-[10px] tracking-widest uppercase ${
           isActive ? 'text-ink-300' : 'text-ink-400'
@@ -55,8 +62,8 @@ export default function Layout() {
 
   return (
     <div className="min-h-screen flex">
-      <aside className="w-72 bg-white/60 backdrop-blur-2xl border-r border-ink-200/40 flex flex-col fixed h-full z-20">
-        <div className="p-8 pb-6">
+      <aside className="w-72 bg-white/40 backdrop-blur-2xl border-r border-white/50 flex flex-col fixed h-full z-20">
+        <div className="p-8 pb-6 relative z-10">
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -71,14 +78,14 @@ export default function Layout() {
           </motion.div>
         </div>
 
-        <nav className="flex-1 px-4 space-y-1">
+        <nav className="flex-1 px-4 space-y-1 relative z-10">
           {navItems.map((item) => (
             <NavItem key={item.to} {...item} isActive={location.pathname === item.to} />
           ))}
         </nav>
 
-        <div className="p-6 border-t border-ink-200/40">
-          <div className="glass-card rounded-xl p-4">
+        <div className="p-6 border-t border-white/40 relative z-10">
+          <div className="marble-card rounded-xl p-4">
             <p className="text-[10px] tracking-widest text-ink-500 uppercase mb-2">
               今日箴言
             </p>

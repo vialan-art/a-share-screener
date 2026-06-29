@@ -51,6 +51,9 @@ export default {
           '100%': { opacity: '1', transform: 'translateY(0)' },
         },
       },
+      backgroundImage: {
+        'marble': "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='marble'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.012' numOctaves='5' seed='7'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncR type='linear' slope='0.15' intercept='0.92'/%3E%3CfeFuncG type='linear' slope='0.15' intercept='0.91'/%3E%3CfeFuncB type='linear' slope='0.15' intercept='0.89'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23marble)'/%3E%3C/svg%3E\")",
+      },
       boxShadow: {
         'soft': '0 2px 20px -4px rgba(0, 0, 0, 0.04)',
         'glow': '0 0 40px -10px rgba(107, 123, 95, 0.15)',
