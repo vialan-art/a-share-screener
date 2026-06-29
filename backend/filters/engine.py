@@ -23,21 +23,24 @@ class FilterEngine:
     # 通用默认及格线
     DEFAULT_RULES = {
         "audit_opinion_required": "标准无保留意见",
-        "min_roe": 5.0,  # ROE >= 5%
-        "max_debt_to_asset": 85.0,  # 资产负债率 <= 85%
-        "min_profit_growth": -50.0,  # 净利润同比增长 >= -50%
-        "min_operating_cash_flow": -10.0,  # 经营现金流 >= -10亿（某些行业允许负）
+        "min_roe": 5.0,
+        "max_debt_to_asset": 85.0,
+        "max_interest_bearing_debt_ratio": 75.0,
+        "min_profit_growth": -50.0,
+        "min_operating_cash_flow": -10.0,
     }
 
-    # 行业特例：不同行业有不同要求
+    # 行业特例
     INDUSTRY_RULES = {
         "银行": {
             "min_roe": 8.0,
-            "max_debt_to_asset": 95.0,  # 银行天然高杠杆
+            "max_debt_to_asset": 95.0,
+            "max_interest_bearing_debt_ratio": 95.0,
         },
         "保险": {
             "min_roe": 8.0,
             "max_debt_to_asset": 95.0,
+            "max_interest_bearing_debt_ratio": 95.0,
         },
         "房地产": {
             "min_roe": 5.0,
@@ -62,10 +65,6 @@ class FilterEngine:
     }
 
     def __init__(self, custom_rules: Dict[str, Any] = None):
-        """
-        custom_rules 可以覆盖默认规则。
-        比如 {"min_roe": 10.0} 会让所有行业的 ROE 及格线提高到 10%。
-        """
         self.custom_rules = custom_rules or {}
 
     def _get_rules(self, industry: str) -> Dict[str, Any]:
@@ -103,13 +102,19 @@ class FilterEngine:
         if debt is not None and max_debt is not None and debt > max_debt:
             reasons.append(f"负债率过高: {debt:.2f}% > {max_debt}%")
 
-        # 4. 净利润增长检查
+        # 4. 有息负债率检查
+        ibd = metrics.get("interest_bearing_debt_ratio")
+        max_ibd = rules.get("max_interest_bearing_debt_ratio")
+        if ibd is not None and max_ibd is not None and ibd > max_ibd:
+            reasons.append(f"有息负债率过高: {ibd:.2f}% > {max_ibd}%")
+
+        # 5. 净利润增长检查
         profit_growth = metrics.get("profit_growth")
         min_profit_growth = rules.get("min_profit_growth")
         if profit_growth is not None and min_profit_growth is not None and profit_growth < min_profit_growth:
             reasons.append(f"净利润增长过低: {profit_growth:.2f}% < {min_profit_growth}%")
 
-        # 5. 经营现金流检查
+        # 6. 经营现金流检查
         ocf = metrics.get("operating_cash_flow")
         min_ocf = rules.get("min_operating_cash_flow")
         if ocf is not None and min_ocf is not None and ocf < min_ocf:

@@ -13,6 +13,15 @@ from backend.pipeline import ScreenerPipeline
 router = APIRouter()
 
 
+def _safe_float(value) -> Optional[float]:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 @router.get("/health")
 def health_check():
     return {"status": "ok", "time": datetime.utcnow().isoformat()}
@@ -80,6 +89,7 @@ def get_latest_snapshot(
                 "pb": i.pb,
                 "roe": i.roe,
                 "debt_to_asset": i.debt_to_asset,
+                "dividend_yield": i.dividend_yield,
             }
             for i in items
         ],
@@ -112,6 +122,7 @@ def get_snapshot_by_date(date: str, db: Session = Depends(get_db)):
                 "pb": i.pb,
                 "roe": i.roe,
                 "debt_to_asset": i.debt_to_asset,
+                "dividend_yield": i.dividend_yield,
             }
             for i in items
         ],
@@ -128,24 +139,49 @@ def get_stock_detail(symbol: str, db: Session = Depends(get_db)):
     metrics = db.query(FinancialMetric).filter(FinancialMetric.symbol == symbol).first()
     latest_score = db.query(StockScore).filter(StockScore.symbol == symbol).order_by(StockScore.score_date.desc()).first()
 
+    def m(field):
+        return getattr(metrics, field, None) if metrics else None
+
     return {
         "symbol": stock.symbol,
         "name": stock.name,
         "industry": stock.industry,
         "market": stock.market,
         "metrics": {
-            "roe": metrics.roe if metrics else None,
-            "roa": metrics.roa if metrics else None,
-            "gross_margin": metrics.gross_margin if metrics else None,
-            "net_margin": metrics.net_margin if metrics else None,
-            "revenue_growth": metrics.revenue_growth if metrics else None,
-            "profit_growth": metrics.profit_growth if metrics else None,
-            "debt_to_asset": metrics.debt_to_asset if metrics else None,
-            "current_ratio": metrics.current_ratio if metrics else None,
-            "pe_ttm": metrics.pe_ttm if metrics else None,
-            "pb": metrics.pb if metrics else None,
-            "dividend_yield": metrics.dividend_yield if metrics else None,
-            "audit_opinion": metrics.audit_opinion if metrics else None,
+            "roe": m("roe"),
+            "roa": m("roa"),
+            "gross_margin": m("gross_margin"),
+            "net_margin": m("net_margin"),
+            "revenue": m("revenue"),
+            "revenue_growth": m("revenue_growth"),
+            "net_profit": m("net_profit"),
+            "profit_growth": m("profit_growth"),
+            "net_profit_deducted": m("net_profit_deducted"),
+            "profit_deducted_growth": m("profit_deducted_growth"),
+            "debt_to_asset": m("debt_to_asset"),
+            "interest_bearing_debt_ratio": m("interest_bearing_debt_ratio"),
+            "current_ratio": m("current_ratio"),
+            "quick_ratio": m("quick_ratio"),
+            "total_assets": m("total_assets"),
+            "total_equity": m("total_equity"),
+            "operating_cash_flow": m("operating_cash_flow"),
+            "operating_cash_flow_growth": m("operating_cash_flow_growth"),
+            "capital_expenditure": m("capital_expenditure"),
+            "free_cash_flow": m("free_cash_flow"),
+            "ocf_to_net_profit": m("ocf_to_net_profit"),
+            "latest_price": m("latest_price"),
+            "change_pct": m("change_pct"),
+            "turnover": m("turnover"),
+            "pe_ttm": m("pe_ttm"),
+            "pb": m("pb"),
+            "ps_ttm": m("ps_ttm"),
+            "dividend_yield": m("dividend_yield"),
+            "audit_opinion": m("audit_opinion"),
+        },
+        "data_quality": {
+            "source": m("data_source") or "unknown",
+            "freshness": m("data_freshness").isoformat() if m("data_freshness") else None,
+            "completeness_score": m("completeness_score"),
         },
         "score": {
             "total": latest_score.total_score if latest_score else None,
@@ -168,7 +204,6 @@ def export_watchlist(db: Session = Depends(get_db)):
     date = latest.snapshot_date
     items = db.query(DailySnapshot).filter(DailySnapshot.snapshot_date == date).order_by(DailySnapshot.total_score.desc()).all()
 
-    # TradingView watchlist CSV 格式：第一列是 symbol，需要加交易所前缀
     lines = ["symbol"]
     for i in items:
         prefix = "SSE:" if i.symbol.startswith("6") else "SZSE:"
@@ -193,6 +228,8 @@ def get_logs(limit: int = 20, db: Session = Depends(get_db)):
             "status": log.status,
             "message": log.message,
             "stocks_count": log.stocks_count,
+            "provider": log.provider,
+            "completeness_avg": log.completeness_avg,
         }
         for log in logs
     ]

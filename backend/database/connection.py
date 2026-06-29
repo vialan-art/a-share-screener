@@ -23,6 +23,11 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 
+def init_db():
+    """创建所有表。如果表结构变更，SQLite 需要手动迁移或重建数据库。"""
+    Base.metadata.create_all(bind=engine)
+
+
 def get_db():
     """FastAPI 依赖：每个请求创建一个数据库会话，请求结束后关闭。"""
     db = SessionLocal()

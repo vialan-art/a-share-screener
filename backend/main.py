@@ -3,13 +3,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.api.routes import router
-from backend.database.connection import engine, Base
+from backend.database.connection import engine, Base, init_db
 from backend.core.config import get_settings
 
 settings = get_settings()
 
 # 创建所有数据库表
-Base.metadata.create_all(bind=engine)
+init_db()
 
 app = FastAPI(
     title=settings.app_name,

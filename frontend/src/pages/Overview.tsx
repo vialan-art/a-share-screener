@@ -15,6 +15,8 @@ import {
   Download,
   ArrowRight,
   Activity,
+  ShieldAlert,
+  Database,
 } from 'lucide-react'
 import {
   BarChart,
@@ -190,6 +192,24 @@ export default function Overview() {
         />
       </div>
 
+      {/* Disclaimer */}
+      <motion.div
+        variants={itemVariants}
+        className="marble-card rounded-2xl p-5 border-amber-200/50"
+      >
+        <div className="flex items-start gap-3">
+          <ShieldAlert size={18} className="text-amber-600 mt-0.5 shrink-0" />
+          <div>
+            <p className="text-xs font-medium text-amber-800 mb-1">数据免责声明</p>
+            <p className="text-xs text-amber-700/80 leading-relaxed">
+              本页面所有财务和行情数据均来自第三方公开接口（AkShare / Mock 模拟数据）。
+              我们已加入数据质量校验，但无法保证 100% 正确，可能存在延迟、字段缺失或接口变更导致的错误。
+              本站仅供学习研究，不构成任何投资建议。
+            </p>
+          </div>
+        </div>
+      </motion.div>
+
       {/* Main Content */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Top Stocks */}
@@ -306,7 +326,10 @@ export default function Overview() {
             <div className="space-y-3 text-sm">
               <div className="flex justify-between">
                 <span className="text-ink-500">数据源</span>
-                <span className="text-sumi">AkShare / Mock</span>
+                <span className="text-sumi flex items-center gap-1.5">
+                  <Database size={12} className="text-ink-400" />
+                  Mock（演示）
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-ink-500">定时任务</span>
@@ -315,6 +338,10 @@ export default function Overview() {
               <div className="flex justify-between">
                 <span className="text-ink-500">过滤策略</span>
                 <span className="text-sumi">行业差异化</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-ink-500">数据可信度</span>
+                <span className="text-amber-600 text-xs">需人工复核</span>
               </div>
             </div>
           </motion.div>
