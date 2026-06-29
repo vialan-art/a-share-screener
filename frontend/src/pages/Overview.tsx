@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import {
   fetchLatestSnapshot,
   fetchLogs,
+  fetchQualitySummary,
   runPipeline,
   getWatchlistDownloadUrl,
 } from '../services/api'
@@ -89,6 +90,7 @@ function ScoreBar({ label, value }: { label: string; value: number }) {
 export default function Overview() {
   const [snapshot, setSnapshot] = useState<any>(null)
   const [logs, setLogs] = useState<any[]>([])
+  const [quality, setQuality] = useState<any>(null)
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
@@ -96,12 +98,14 @@ export default function Overview() {
   }, [])
 
   async function loadData() {
-    const [snap, logList] = await Promise.all([
+    const [snap, logList, qualityData] = await Promise.all([
       fetchLatestSnapshot(),
       fetchLogs(),
+      fetchQualitySummary(),
     ])
     setSnapshot(snap)
     setLogs(logList)
+    setQuality(qualityData)
   }
 
   async function handleRun() {
@@ -113,18 +117,29 @@ export default function Overview() {
 
   const topStocks = snapshot?.items?.slice(0, 8) || []
   const latestLog = logs[0]
+  const meta = snapshot?.meta || {}
+  const providerName = latestLog?.provider || 'mock'
+  const providerLabel = providerName === 'akshare' ? 'AkShare（真实 A 股）' : 'Mock（模拟数据）'
+  const completenessPct = quality?.avg_completeness
+    ? Math.round(quality.avg_completeness * 100)
+    : latestLog?.completeness_avg
+    ? Math.round(latestLog.completeness_avg * 100)
+    : null
 
   const industryDistribution = useMemo(() => {
-    const counts: Record<string, number> = {}
-    snapshot?.items?.forEach((item: any) => {
-      const industry = item.industry || '未分类'
-      counts[industry] = (counts[industry] || 0) + 1
-    })
+    const counts: Record<string, number> = meta.industry_distribution || {}
+    // 如果 API 没返回分布，再自己算
+    if (Object.keys(counts).length === 0) {
+      snapshot?.items?.forEach((item: any) => {
+        const industry = item.industry || '未分类'
+        counts[industry] = (counts[industry] || 0) + 1
+      })
+    }
     return Object.entries(counts)
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 8)
-  }, [snapshot])
+  }, [snapshot, meta])
 
   return (
     <motion.div
@@ -175,7 +190,7 @@ export default function Overview() {
         <StatCard
           label="候选股票"
           value={snapshot?.count?.toString() || '0'}
-          subtext="通过所有及格线"
+          subtext={meta.avg_score !== null && meta.avg_score !== undefined ? `平均分 ${meta.avg_score.toFixed(3)}` : '通过所有及格线'}
           icon={PieChart}
         />
         <StatCard
@@ -185,9 +200,9 @@ export default function Overview() {
           icon={TrendingUp}
         />
         <StatCard
-          label="最近更新"
-          value={latestLog?.status === 'success' ? '成功' : latestLog?.status || '—'}
-          subtext={latestLog ? new Date(latestLog.time).toLocaleString('zh-CN') : undefined}
+          label="数据完整度"
+          value={completenessPct !== null ? `${completenessPct}%` : '—'}
+          subtext={providerLabel}
           icon={Activity}
         />
       </div>
@@ -323,27 +338,39 @@ export default function Overview() {
             <p className="text-[10px] tracking-[0.2em] text-ink-500 uppercase mb-4">
               System Status
             </p>
-            <div className="space-y-3 text-sm">
-              <div className="flex justify-between">
-                <span className="text-ink-500">数据源</span>
-                <span className="text-sumi flex items-center gap-1.5">
-                  <Database size={12} className="text-ink-400" />
-                  Mock（演示）
-                </span>
+              <div className="space-y-3 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-ink-500">数据源</span>
+                  <span className="text-sumi flex items-center gap-1.5">
+                    <Database size={12} className="text-ink-400" />
+                    {providerLabel}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-ink-500">定时任务</span>
+                  <span className="text-sumi">每日 19:00</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-ink-500">覆盖股票</span>
+                  <span className="text-sumi">{latestLog?.stocks_count ? `${latestLog.stocks_count} 只` : '—'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-ink-500">过滤策略</span>
+                  <span className="text-sumi">行业差异化</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-ink-500">数据可信度</span>
+                  <span className={`text-xs ${completenessPct && completenessPct >= 70 ? 'text-moss' : completenessPct && completenessPct >= 40 ? 'text-amber-600' : 'text-rust'}`}>
+                    {completenessPct !== null ? `${completenessPct}% 完整度` : '未知'}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-ink-500">最近更新</span>
+                  <span className="text-xs text-ink-600">
+                    {latestLog ? new Date(latestLog.time).toLocaleString('zh-CN') : '—'}
+                  </span>
+                </div>
               </div>
-              <div className="flex justify-between">
-                <span className="text-ink-500">定时任务</span>
-                <span className="text-sumi">每日 19:00</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-ink-500">过滤策略</span>
-                <span className="text-sumi">行业差异化</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-ink-500">数据可信度</span>
-                <span className="text-amber-600 text-xs">需人工复核</span>
-              </div>
-            </div>
           </motion.div>
         </div>
       </div>

@@ -118,6 +118,24 @@ class DataQualityEngine:
         return round(sum(r.completeness_score for r in reports.values()) / len(reports), 4)
 
     @staticmethod
+    def issue_summary(reports: Dict[str, DataQualityReport]) -> Dict[str, Any]:
+        """汇总数据质量问题。"""
+        if not reports:
+            return {}
+        total = len(reports)
+        reliable = sum(1 for r in reports.values() if r.to_dict()["is_reliable"])
+        issue_counts: Dict[str, int] = {}
+        for r in reports.values():
+            for issue in r.issues:
+                issue_counts[issue] = issue_counts.get(issue, 0) + 1
+        return {
+            "total": total,
+            "reliable_count": reliable,
+            "reliable_pct": round(reliable / total, 4),
+            "top_issues": sorted(issue_counts.items(), key=lambda x: x[1], reverse=True)[:10],
+        }
+
+    @staticmethod
     def enrich_metrics_with_quality(
         metrics_map: Dict[str, Dict[str, Any]],
         reports: Dict[str, DataQualityReport],

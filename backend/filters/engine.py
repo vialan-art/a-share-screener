@@ -1,9 +1,10 @@
-"""及格线过滤系统。
+"""及格线过滤系统（生产级优化）。
 
 设计理念：
 1. 先排除有硬伤的公司（审计非标、亏损、高负债、现金流差）
 2. 不同行业可以有不同的及格线
 3. 过滤结果会记录原因，方便调试和学习
+4. 对缺失数据采取保守策略：关键字段缺失时默认不通过
 """
 from typing import List, Dict, Any
 from dataclasses import dataclass
@@ -64,8 +65,9 @@ class FilterEngine:
         },
     }
 
-    def __init__(self, custom_rules: Dict[str, Any] = None):
+    def __init__(self, custom_rules: Dict[str, Any] = None, strict_mode: bool = True):
         self.custom_rules = custom_rules or {}
+        self.strict_mode = strict_mode
 
     def _get_rules(self, industry: str) -> Dict[str, Any]:
         """合并默认规则、行业规则、自定义规则。"""
@@ -74,6 +76,16 @@ class FilterEngine:
             rules.update(self.INDUSTRY_RULES[industry])
         rules.update(self.custom_rules)
         return rules
+
+    @staticmethod
+    def _safe_float(value) -> float:
+        """安全转 float，无效值返回 None。"""
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
 
     def evaluate(self, stock: Dict[str, Any], metrics: Dict[str, Any]) -> FilterResult:
         """对一只股票进行及格线检查。"""
@@ -88,34 +100,38 @@ class FilterEngine:
         if rules.get("audit_opinion_required"):
             required = rules["audit_opinion_required"]
             if required not in audit and "无保留" not in audit:
-                reasons.append(f"审计意见不合规: {audit or '未知'}")
+                if audit:
+                    reasons.append(f"审计意见不合规: {audit}")
+                elif self.strict_mode:
+                    # 严格模式下，缺少审计意见视为不合规
+                    reasons.append("缺少审计意见")
 
         # 2. ROE 检查
-        roe = metrics.get("roe")
+        roe = self._safe_float(metrics.get("roe"))
         min_roe = rules.get("min_roe")
         if roe is not None and min_roe is not None and roe < min_roe:
             reasons.append(f"ROE 过低: {roe:.2f}% < {min_roe}%")
 
         # 3. 资产负债率检查
-        debt = metrics.get("debt_to_asset")
+        debt = self._safe_float(metrics.get("debt_to_asset"))
         max_debt = rules.get("max_debt_to_asset")
         if debt is not None and max_debt is not None and debt > max_debt:
             reasons.append(f"负债率过高: {debt:.2f}% > {max_debt}%")
 
         # 4. 有息负债率检查
-        ibd = metrics.get("interest_bearing_debt_ratio")
+        ibd = self._safe_float(metrics.get("interest_bearing_debt_ratio"))
         max_ibd = rules.get("max_interest_bearing_debt_ratio")
         if ibd is not None and max_ibd is not None and ibd > max_ibd:
             reasons.append(f"有息负债率过高: {ibd:.2f}% > {max_ibd}%")
 
         # 5. 净利润增长检查
-        profit_growth = metrics.get("profit_growth")
+        profit_growth = self._safe_float(metrics.get("profit_growth"))
         min_profit_growth = rules.get("min_profit_growth")
         if profit_growth is not None and min_profit_growth is not None and profit_growth < min_profit_growth:
             reasons.append(f"净利润增长过低: {profit_growth:.2f}% < {min_profit_growth}%")
 
         # 6. 经营现金流检查
-        ocf = metrics.get("operating_cash_flow")
+        ocf = self._safe_float(metrics.get("operating_cash_flow"))
         min_ocf = rules.get("min_operating_cash_flow")
         if ocf is not None and min_ocf is not None and ocf < min_ocf:
             reasons.append(f"经营现金流过低: {ocf:.2f}亿 < {min_ocf}亿")

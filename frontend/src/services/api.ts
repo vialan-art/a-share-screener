@@ -33,6 +33,11 @@ export async function fetchLogs() {
   return res.json()
 }
 
+export async function fetchQualitySummary() {
+  const res = await fetch(`${API_BASE}/quality/summary`)
+  return res.json()
+}
+
 export function getWatchlistDownloadUrl(): string {
   return `${API_BASE}/export/watchlist`
 }

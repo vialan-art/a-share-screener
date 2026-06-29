@@ -61,7 +61,7 @@ def get_latest_snapshot(
     """获取最新快照，支持筛选。"""
     latest = db.query(DailySnapshot).order_by(DailySnapshot.snapshot_date.desc()).first()
     if not latest:
-        return {"date": None, "items": []}
+        return {"date": None, "items": [], "meta": {}}
 
     date = latest.snapshot_date
     query = db.query(DailySnapshot).filter(DailySnapshot.snapshot_date == date)
@@ -73,9 +73,21 @@ def get_latest_snapshot(
 
     items = query.order_by(DailySnapshot.total_score.desc()).all()
 
+    # 计算快照统计信息
+    scores = [i.total_score for i in items if i.total_score is not None]
+    industries = {}
+    for i in items:
+        industries[i.industry] = industries.get(i.industry, 0) + 1
+
     return {
         "date": date,
         "count": len(items),
+        "meta": {
+            "avg_score": round(sum(scores) / len(scores), 4) if scores else None,
+            "max_score": round(max(scores), 4) if scores else None,
+            "min_score": round(min(scores), 4) if scores else None,
+            "industry_distribution": dict(sorted(industries.items(), key=lambda x: x[1], reverse=True)[:15]),
+        },
         "items": [
             {
                 "symbol": i.symbol,
@@ -182,6 +194,7 @@ def get_stock_detail(symbol: str, db: Session = Depends(get_db)):
             "source": m("data_source") or "unknown",
             "freshness": m("data_freshness").isoformat() if m("data_freshness") else None,
             "completeness_score": m("completeness_score"),
+            "issues": [],
         },
         "score": {
             "total": latest_score.total_score if latest_score else None,
@@ -233,6 +246,28 @@ def get_logs(limit: int = 20, db: Session = Depends(get_db)):
         }
         for log in logs
     ]
+
+
+@router.get("/quality/summary")
+def get_quality_summary(db: Session = Depends(get_db)):
+    """获取最新数据质量摘要。"""
+    from backend.quality.engine import DataQualityEngine
+    from backend.database.models import FinancialMetric
+
+    metrics = db.query(FinancialMetric).all()
+    metrics_map = {}
+    for m in metrics:
+        d = {c.name: getattr(m, c.name) for c in FinancialMetric.__table__.columns}
+        metrics_map[d["symbol"]] = d
+
+    reports = DataQualityEngine.evaluate_all(
+        metrics_map, source="db", freshness=datetime.utcnow()
+    )
+    return {
+        "count": len(reports),
+        "avg_completeness": DataQualityEngine.average_completeness(reports),
+        "issue_summary": DataQualityEngine.issue_summary(reports),
+    }
 
 
 @router.post("/advisor/chat")

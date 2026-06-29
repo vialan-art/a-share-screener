@@ -1,12 +1,14 @@
-"""多因子评分系统。
+"""多因子评分系统（生产级优化）。
 
 设计思路：
-把质量、估值、动量三个维度分别打分，再加权合成总分。
-每个因子内部用百分位排名归一化，避免不同指标量纲不同的问题。
+1. 质量、估值、动量三维度分别打分，再加权合成总分。
+2. 每个因子内部用百分位排名归一化，避免量纲差异。
+3. 增加稳健性处理：异常值截断、空值填充、行业中性化（可选）。
+4. 评分结果附带详细拆解，方便解释。
 """
 import math
-from typing import List, Dict, Any
-from dataclasses import dataclass
+from typing import List, Dict, Any, Optional
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -16,7 +18,7 @@ class ScoreResult:
     value_score: float
     momentum_score: float
     total_score: float
-    details: Dict[str, Any]
+    details: Dict[str, Any] = field(default_factory=dict)
 
 
 class ScoringEngine:
@@ -27,99 +29,178 @@ class ScoringEngine:
         quality_weight: float = 0.45,
         value_weight: float = 0.35,
         momentum_weight: float = 0.20,
+        industry_neutral: bool = False,
     ):
         total = quality_weight + value_weight + momentum_weight
         self.quality_weight = quality_weight / total
         self.value_weight = value_weight / total
         self.momentum_weight = momentum_weight / total
+        self.industry_neutral = industry_neutral
 
-    def _percentile_rank(self, value: float, values: List[float], higher_is_better: bool = True) -> float:
-        """计算某个值在一组值中的百分位排名。"""
-        clean_values = [v for v in values if v is not None and not math.isnan(v)]
+    @staticmethod
+    def _safe_value(value: Any) -> Optional[float]:
+        """安全地把值转成 float，过滤无效值。"""
+        if value is None:
+            return None
+        if isinstance(value, float) and (math.isnan(value) or math.isinf(value)):
+            return None
+        try:
+            return float(value)
+        except (ValueError, TypeError):
+            return None
+
+    @staticmethod
+    def _winsorize(values: List[float], lower_percentile: float = 0.05, upper_percentile: float = 0.95) -> List[float]:
+        """对数组进行缩尾处理，减少极端值影响。"""
+        clean = sorted([v for v in values if v is not None and not math.isnan(v)])
+        if len(clean) < 5:
+            return values
+        lower = clean[int(len(clean) * lower_percentile)]
+        upper = clean[int(len(clean) * upper_percentile)]
+        return [min(max(v, lower), upper) if v is not None and not math.isnan(v) else v for v in values]
+
+    @staticmethod
+    def _percentile_rank(value: float, values: List[float], higher_is_better: bool = True) -> float:
+        """计算某个值在一组值中的百分位排名（稳健版）。"""
+        clean_values = sorted([v for v in values if v is not None and not math.isnan(v)])
         if not clean_values:
             return 0.5
 
         n = len(clean_values)
-        below = sum(1 for v in clean_values if v <= value)
-        percentile = below / n
+        # 使用二分查找定位
+        below = 0
+        for v in clean_values:
+            if v <= value:
+                below += 1
+            else:
+                break
 
+        # 避免极端值完全满分/零分，使用 (below - 0.5) / n
+        percentile = max(0.0, min(1.0, (below - 0.5) / n))
         return percentile if higher_is_better else 1 - percentile
 
-    def _quality_score(self, metrics: Dict[str, Any], benchmark: Dict[str, List[float]]) -> float:
+    def _quality_score(self, metrics: Dict[str, Any], benchmark: Dict[str, List[float]]) -> tuple[float, Dict[str, Any]]:
         """质量分：盈利能力 + 成长性 + 现金流健康。"""
         scores = []
+        details = {}
 
-        if metrics.get("roe") is not None:
-            scores.append(self._percentile_rank(metrics["roe"], benchmark.get("roe", []), True))
+        roe = self._safe_value(metrics.get("roe"))
+        if roe is not None:
+            # ROE 截断到 [-50, 100]，避免亏损股极端负值或炒作股的虚假高 ROE
+            roe_capped = max(min(roe, 100.0), -50.0)
+            score = self._percentile_rank(roe_capped, benchmark.get("roe", []), True)
+            scores.append(score)
+            details["roe_score"] = round(score, 4)
 
-        if metrics.get("gross_margin") is not None:
-            scores.append(self._percentile_rank(metrics["gross_margin"], benchmark.get("gross_margin", []), True))
+        gross_margin = self._safe_value(metrics.get("gross_margin"))
+        if gross_margin is not None:
+            gm_capped = max(min(gross_margin, 100.0), -50.0)
+            score = self._percentile_rank(gm_capped, benchmark.get("gross_margin", []), True)
+            scores.append(score)
+            details["gross_margin_score"] = round(score, 4)
 
-        if metrics.get("net_margin") is not None:
-            scores.append(self._percentile_rank(metrics["net_margin"], benchmark.get("net_margin", []), True))
+        net_margin = self._safe_value(metrics.get("net_margin"))
+        if net_margin is not None:
+            nm_capped = max(min(net_margin, 100.0), -100.0)
+            score = self._percentile_rank(nm_capped, benchmark.get("net_margin", []), True)
+            scores.append(score)
+            details["net_margin_score"] = round(score, 4)
 
-        if metrics.get("profit_deducted_growth") is not None:
-            pg = max(min(metrics["profit_deducted_growth"], 100.0), -50.0)
-            scores.append(self._percentile_rank(pg, benchmark.get("profit_deducted_growth", []), True))
-        elif metrics.get("profit_growth") is not None:
-            pg = max(min(metrics["profit_growth"], 100.0), -50.0)
-            scores.append(self._percentile_rank(pg, benchmark.get("profit_growth", []), True))
+        # 成长性：优先用扣非净利润增长，其次净利润增长
+        profit_growth = self._safe_value(metrics.get("profit_deducted_growth"))
+        growth_key = "profit_deducted_growth"
+        if profit_growth is None:
+            profit_growth = self._safe_value(metrics.get("profit_growth"))
+            growth_key = "profit_growth"
+        if profit_growth is not None:
+            pg_capped = max(min(profit_growth, 100.0), -50.0)
+            score = self._percentile_rank(pg_capped, benchmark.get(growth_key, benchmark.get("profit_growth", [])), True)
+            scores.append(score)
+            details["growth_score"] = round(score, 4)
 
         # 现金流质量：OCF/净利润 越高越好
-        ocf_ratio = metrics.get("ocf_to_net_profit")
+        ocf_ratio = self._safe_value(metrics.get("ocf_to_net_profit"))
         if ocf_ratio is not None:
-            scores.append(self._percentile_rank(ocf_ratio, benchmark.get("ocf_to_net_profit", []), True))
+            ratio_capped = max(min(ocf_ratio, 10.0), -5.0)
+            score = self._percentile_rank(ratio_capped, benchmark.get("ocf_to_net_profit", []), True)
+            scores.append(score)
+            details["ocf_ratio_score"] = round(score, 4)
 
         if not scores:
-            return 0.5
-        return sum(scores) / len(scores)
+            return 0.5, details
+        return sum(scores) / len(scores), details
 
-    def _value_score(self, metrics: Dict[str, Any], benchmark: Dict[str, List[float]]) -> float:
+    def _value_score(self, metrics: Dict[str, Any], benchmark: Dict[str, List[float]]) -> tuple[float, Dict[str, Any]]:
         """估值分：PE/PB 越低越好，股息率越高越好。"""
         scores = []
+        details = {}
 
-        pe = metrics.get("pe_ttm")
-        if pe is not None and pe > 0:
-            scores.append(self._percentile_rank(pe, benchmark.get("pe_ttm", []), False))
-        elif pe is not None and pe <= 0:
-            scores.append(0.0)
+        pe = self._safe_value(metrics.get("pe_ttm"))
+        if pe is not None:
+            if pe > 0:
+                # PE 截断到 [0, 200]，避免极端低 PE 影响排名
+                pe_capped = min(pe, 200.0)
+                score = self._percentile_rank(pe_capped, benchmark.get("pe_ttm", []), False)
+                scores.append(score)
+                details["pe_score"] = round(score, 4)
+            else:
+                # 亏损公司 PE 为负，估值分最低
+                scores.append(0.0)
+                details["pe_score"] = 0.0
 
-        pb = metrics.get("pb")
-        if pb is not None and pb > 0:
-            scores.append(self._percentile_rank(pb, benchmark.get("pb", []), False))
-        elif pb is not None and pb <= 0:
-            scores.append(0.0)
+        pb = self._safe_value(metrics.get("pb"))
+        if pb is not None:
+            if pb > 0:
+                pb_capped = min(pb, 50.0)
+                score = self._percentile_rank(pb_capped, benchmark.get("pb", []), False)
+                scores.append(score)
+                details["pb_score"] = round(score, 4)
+            else:
+                scores.append(0.0)
+                details["pb_score"] = 0.0
 
-        if metrics.get("dividend_yield") is not None:
-            scores.append(self._percentile_rank(metrics["dividend_yield"], benchmark.get("dividend_yield", []), True))
+        dividend_yield = self._safe_value(metrics.get("dividend_yield"))
+        if dividend_yield is not None and dividend_yield >= 0:
+            dy_capped = min(dividend_yield, 20.0)
+            score = self._percentile_rank(dy_capped, benchmark.get("dividend_yield", []), True)
+            scores.append(score)
+            details["dividend_score"] = round(score, 4)
 
         if not scores:
-            return 0.5
-        return sum(scores) / len(scores)
+            return 0.5, details
+        return sum(scores) / len(scores), details
 
-    def _momentum_score(self, metrics: Dict[str, Any], benchmark: Dict[str, List[float]]) -> float:
+    def _momentum_score(self, metrics: Dict[str, Any], benchmark: Dict[str, List[float]]) -> tuple[float, Dict[str, Any]]:
         """动量分：近期涨跌幅 + 换手率。"""
         scores = []
+        details = {}
 
-        if metrics.get("change_pct") is not None:
-            cp = max(min(metrics["change_pct"], 20.0), -20.0)
-            scores.append(self._percentile_rank(cp, benchmark.get("change_pct", []), True))
+        change_pct = self._safe_value(metrics.get("change_pct"))
+        if change_pct is not None:
+            # 涨跌幅截断到 [-10, 10]，避免涨停/跌停极端影响
+            cp_capped = max(min(change_pct, 10.0), -10.0)
+            score = self._percentile_rank(cp_capped, benchmark.get("change_pct", []), True)
+            scores.append(score)
+            details["change_pct_score"] = round(score, 4)
 
-        turnover = metrics.get("turnover")
+        turnover = self._safe_value(metrics.get("turnover"))
         if turnover is not None:
+            # 换手率过高（>15%）或过低（<0.1%）都 penalize
             if turnover > 15.0:
-                scores.append(0.3)
+                score = 0.3
             elif turnover < 0.1:
-                scores.append(0.3)
+                score = 0.3
             else:
-                scores.append(self._percentile_rank(turnover, benchmark.get("turnover", []), True))
+                score = self._percentile_rank(turnover, benchmark.get("turnover", []), True)
+            scores.append(score)
+            details["turnover_score"] = round(score, 4)
 
         if not scores:
-            return 0.5
-        return sum(scores) / len(scores)
+            return 0.5, details
+        return sum(scores) / len(scores), details
 
     def _build_benchmark(self, all_metrics: List[Dict[str, Any]]) -> Dict[str, List[float]]:
-        """把一组股票的指标收集起来，用于计算百分位。"""
+        """把一组股票的指标收集起来，用于计算百分位，并做缩尾处理。"""
         benchmark = {
             "roe": [],
             "gross_margin": [],
@@ -136,9 +217,13 @@ class ScoringEngine:
 
         for m in all_metrics:
             for key in benchmark:
-                value = m.get(key)
-                if value is not None and not math.isnan(value):
+                value = self._safe_value(m.get(key))
+                if value is not None:
                     benchmark[key].append(value)
+
+        # 缩尾处理
+        for key in benchmark:
+            benchmark[key] = self._winsorize(benchmark[key])
 
         return benchmark
 
@@ -156,9 +241,9 @@ class ScoringEngine:
             symbol = stock["symbol"]
             metrics = metrics_map.get(symbol, {})
 
-            q = self._quality_score(metrics, benchmark)
-            v = self._value_score(metrics, benchmark)
-            m_score = self._momentum_score(metrics, benchmark)
+            q, q_details = self._quality_score(metrics, benchmark)
+            v, v_details = self._value_score(metrics, benchmark)
+            m_score, m_details = self._momentum_score(metrics, benchmark)
 
             total = q * self.quality_weight + v * self.value_weight + m_score * self.momentum_weight
 
@@ -168,11 +253,16 @@ class ScoringEngine:
                 value_score=round(v, 4),
                 momentum_score=round(m_score, 4),
                 total_score=round(total, 4),
-                details={"weights": {
-                    "quality": self.quality_weight,
-                    "value": self.value_weight,
-                    "momentum": self.momentum_weight,
-                }},
+                details={
+                    "weights": {
+                        "quality": self.quality_weight,
+                        "value": self.value_weight,
+                        "momentum": self.momentum_weight,
+                    },
+                    "quality": q_details,
+                    "value": v_details,
+                    "momentum": m_details,
+                },
             ))
 
         results.sort(key=lambda x: x.total_score, reverse=True)

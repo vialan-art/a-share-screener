@@ -1,4 +1,11 @@
-"""主流程：数据拉取 -> 过滤 -> 评分 -> 存档。"""
+"""主流程：数据拉取 -> 过滤 -> 评分 -> 存档（生产级优化）。
+
+优化点：
+1. 分阶段拉取数据，单点失败不导致整个流程崩溃
+2. 详细日志和运行时间统计
+3. 数据质量报告持久化到 UpdateLog
+4. 支持全市场 5000+ 只股票
+"""
 from datetime import datetime
 from typing import List, Dict, Any
 from sqlalchemy.orm import Session
@@ -28,30 +35,41 @@ class ScreenerPipeline:
 
     def _persist_metrics(self, db: Session, metrics_map: Dict[str, Dict[str, Any]]):
         """把合并后的指标持久化到 FinancialMetric 表。"""
+        valid_keys = {c.name for c in FinancialMetric.__table__.columns}
         for sym, item in metrics_map.items():
             existing = db.query(FinancialMetric).filter(FinancialMetric.symbol == sym).first()
+            data = {k: v for k, v in item.items() if k in valid_keys and k != "id"}
             if existing:
-                for k, v in item.items():
-                    if hasattr(existing, k) and k != "id":
-                        setattr(existing, k, v)
+                for k, v in data.items():
+                    setattr(existing, k, v)
             else:
-                # 过滤掉模型中没有的字段
-                valid_keys = {c.name for c in FinancialMetric.__table__.columns}
-                data = {k: v for k, v in item.items() if k in valid_keys}
                 db.add(FinancialMetric(**data))
         db.commit()
 
-    def run(self, db: Session, max_stocks: int = 500) -> Dict[str, Any]:
+    def run(self, db: Session, max_stocks: int = 5000) -> Dict[str, Any]:
         """运行完整流程。"""
         start_time = datetime.utcnow()
         log = UpdateLog(status="running", message="开始数据更新", provider=self.provider.name)
         db.add(log)
         db.commit()
 
+        stats = {
+            "stage_times": {},
+            "errors": [],
+        }
+
         try:
             # 1. 拉取股票列表
+            stage_start = datetime.utcnow()
             print("[1/5] 拉取股票列表...")
-            stocks = self.provider.get_stock_list()
+            try:
+                stocks = self.provider.get_stock_list()
+            except Exception as e:
+                error_msg = f"拉取股票列表失败: {e}"
+                print(error_msg)
+                stats["errors"].append(error_msg)
+                raise
+
             if max_stocks:
                 stocks = stocks[:max_stocks]
 
@@ -66,49 +84,80 @@ class ScreenerPipeline:
                 else:
                     db.add(Stock(**s))
             db.commit()
+            stats["stage_times"]["stock_list"] = (datetime.utcnow() - stage_start).total_seconds()
+            print(f"[1/5] 完成，共 {len(stocks)} 只股票")
 
             symbols = [s["symbol"] for s in stocks]
 
             # 2. 拉取财务指标
+            stage_start = datetime.utcnow()
             print("[2/5] 拉取财务指标...")
-            financial_data = self.provider.get_financial_metrics(symbols)
+            try:
+                financial_data = self.provider.get_financial_metrics(symbols)
+            except Exception as e:
+                error_msg = f"拉取财务指标失败: {e}"
+                print(error_msg)
+                stats["errors"].append(error_msg)
+                financial_data = []
+
             metrics_map = {}
             for item in financial_data:
                 sym = normalize_symbol(item["symbol"])
                 item["symbol"] = sym
                 metrics_map[sym] = item
+            stats["stage_times"]["financial_metrics"] = (datetime.utcnow() - stage_start).total_seconds()
+            print(f"[2/5] 完成，财务数据覆盖 {len(metrics_map)} 只股票")
 
             # 3. 拉取行情（估值、动量）并合并
+            stage_start = datetime.utcnow()
             print("[3/5] 拉取行情数据...")
-            price_data = self.provider.get_daily_prices(symbols)
+            try:
+                price_data = self.provider.get_daily_prices(symbols)
+            except Exception as e:
+                error_msg = f"拉取行情失败: {e}"
+                print(error_msg)
+                stats["errors"].append(error_msg)
+                price_data = []
+
             for item in price_data:
                 sym = normalize_symbol(item["symbol"])
                 if sym not in metrics_map:
-                    # 如果财务数据缺失，用行情数据兜底
                     metrics_map[sym] = {"symbol": sym}
                 metrics_map[sym].update(item)
+            stats["stage_times"]["daily_prices"] = (datetime.utcnow() - stage_start).total_seconds()
+            print(f"[3/5] 完成，行情数据覆盖 {len(price_data)} 只股票")
 
             # 4. 数据质量评估
+            stage_start = datetime.utcnow()
             print("[4/5] 数据质量评估...")
             quality_reports = DataQualityEngine.evaluate_all(
                 metrics_map, source=self.provider.name, freshness=self.now
             )
             metrics_map = DataQualityEngine.enrich_metrics_with_quality(metrics_map, quality_reports)
             avg_completeness = DataQualityEngine.average_completeness(quality_reports)
+            issue_summary = DataQualityEngine.issue_summary(quality_reports)
+            stats["stage_times"]["quality"] = (datetime.utcnow() - stage_start).total_seconds()
+            print(f"[4/5] 完成，平均完整度 {avg_completeness:.1%}")
 
             # 持久化所有指标（包括行情数据）
             self._persist_metrics(db, metrics_map)
 
             # 5. 过滤
+            stage_start = datetime.utcnow()
             print("[5/5] 运行过滤...")
             filter_results = self.filter_engine.evaluate_batch(stocks, metrics_map)
             passed_symbols = {r.symbol for r in filter_results if r.passed}
             filter_reasons_map = {r.symbol: r.reasons for r in filter_results}
+            stats["stage_times"]["filter"] = (datetime.utcnow() - stage_start).total_seconds()
+            print(f"[5/5] 完成，{len(passed_symbols)}/{len(stocks)} 只通过过滤")
 
             # 6. 评分
+            stage_start = datetime.utcnow()
             print("[6/6] 运行评分...")
             passed_stocks = [s for s in stocks if s["symbol"] in passed_symbols]
             score_results = self.scoring_engine.score_batch(passed_stocks, metrics_map)
+            stats["stage_times"]["scoring"] = (datetime.utcnow() - stage_start).total_seconds()
+            print(f"[6/6] 完成，评分 {len(score_results)} 只股票")
 
             # 写入评分结果
             for sr in score_results:
@@ -138,6 +187,7 @@ class ScreenerPipeline:
             db.commit()
 
             # 7. 生成每日快照
+            stage_start = datetime.utcnow()
             print("[存档] 保存今日快照...")
             snapshot_date = self.now.strftime("%Y-%m-%d")
             db.query(DailySnapshot).filter(DailySnapshot.snapshot_date == snapshot_date).delete()
@@ -163,12 +213,17 @@ class ScreenerPipeline:
                     data_json=str(metrics),
                 ))
             db.commit()
+            stats["stage_times"]["snapshot"] = (datetime.utcnow() - stage_start).total_seconds()
+
+            total_time = (datetime.utcnow() - start_time).total_seconds()
+            stats["stage_times"]["total"] = total_time
 
             # 更新日志
             log.status = "success"
             log.message = f"数据更新成功，平均完整度 {avg_completeness:.1%}"
             log.stocks_count = len(stocks)
             log.completeness_avg = avg_completeness
+            log.provider = self.provider.name
             db.commit()
 
             return {
@@ -176,6 +231,9 @@ class ScreenerPipeline:
                 "stocks_count": len(stocks),
                 "passed_count": len(passed_stocks),
                 "completeness_avg": avg_completeness,
+                "issue_summary": issue_summary,
+                "stage_times": stats["stage_times"],
+                "errors": stats["errors"],
                 "top_scores": [
                     {
                         "symbol": sr.symbol,
