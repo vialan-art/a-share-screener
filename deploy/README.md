@@ -1,3 +1,9 @@
+---
+title: README
+type: note
+permalink: a-share-screener/deploy/readme
+---
+
 # A-Share Screener 部署指南
 
 ## 域名
@@ -38,10 +44,21 @@ nano .env
 至少确认：
 
 ```env
+# 数据源：mock 为模拟数据，akshare 为真实 A 股数据
+SCREENER_PROVIDER=akshare
+
 AI_ADVISOR_ENABLED=false
 # 如需启用 AI 顾问：
 # AI_ADVISOR_API_KEY=sk-...
 ```
+
+或者在 `deploy/.env` 文件中设置：
+
+```env
+SCREENER_PROVIDER=akshare
+```
+
+然后 `docker-compose` 会自动读取。
 
 ### 3. 启动服务
 

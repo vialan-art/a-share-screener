@@ -3,6 +3,7 @@
 用 schedule 库每天 19:00 运行一次选股流程。
 可以在服务器上长期运行这个脚本。
 """
+import os
 import schedule
 import time
 from datetime import datetime
@@ -11,12 +12,16 @@ from backend.database.connection import SessionLocal
 from backend.pipeline import ScreenerPipeline
 
 
+# 数据源可通过环境变量切换：mock / akshare
+SCREENER_PROVIDER = os.environ.get("SCREENER_PROVIDER", "mock")
+
+
 def job():
     """定时执行的任务。"""
-    print(f"[{datetime.now().isoformat()}] 开始定时选股任务")
+    print(f"[{datetime.now().isoformat()}] 开始定时选股任务 (provider={SCREENER_PROVIDER})")
     db = SessionLocal()
     try:
-        pipeline = ScreenerPipeline()
+        pipeline = ScreenerPipeline(provider_name=SCREENER_PROVIDER)
         result = pipeline.run(db, max_stocks=500)
         print(f"任务完成: {result}")
     except Exception as e:

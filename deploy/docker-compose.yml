@@ -10,6 +10,7 @@ services:
       - ../backend/.env:/app/backend/.env:ro
     environment:
       - DATABASE_URL=sqlite:///./data/screener.db
+      - SCREENER_PROVIDER=${SCREENER_PROVIDER:-mock}
     networks:
       - screener-network
 
@@ -35,6 +36,9 @@ services:
     volumes:
       - ../data:/app/data
       - ../backend/.env:/app/backend/.env:ro
+    environment:
+      - DATABASE_URL=sqlite:///./data/screener.db
+      - SCREENER_PROVIDER=${SCREENER_PROVIDER:-mock}
     command: ["python", "-m", "backend.scheduler.daily_job"]
     depends_on:
       - backend
