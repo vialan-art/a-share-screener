@@ -44,13 +44,11 @@ function StatCard({
   value,
   subtext,
   icon: Icon,
-  delay,
 }: {
   label: string
   value: string
   subtext?: string
   icon: React.ElementType
-  delay: number
 }) {
   return (
     <motion.div
@@ -171,28 +169,24 @@ export default function Overview() {
           label="最新快照"
           value={snapshot?.date || '—'}
           icon={Calendar}
-          delay={0}
         />
         <StatCard
           label="候选股票"
           value={snapshot?.count?.toString() || '0'}
           subtext="通过所有及格线"
           icon={PieChart}
-          delay={1}
         />
         <StatCard
           label="当前最高分"
           value={snapshot?.items?.[0]?.total_score?.toFixed(3) || '—'}
           subtext={snapshot?.items?.[0]?.name}
           icon={TrendingUp}
-          delay={2}
         />
         <StatCard
           label="最近更新"
           value={latestLog?.status === 'success' ? '成功' : latestLog?.status || '—'}
           subtext={latestLog ? new Date(latestLog.time).toLocaleString('zh-CN') : undefined}
           icon={Activity}
-          delay={3}
         />
       </div>
 

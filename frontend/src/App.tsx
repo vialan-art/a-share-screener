@@ -1,6 +1,4 @@
-import { motion } from 'framer-motion'
-import { useEffect, useState } from 'react'
-import { Routes, Route, useLocation } from 'react-router-dom'
+import { Routes, Route } from 'react-router-dom'
 import Layout from './components/Layout'
 import Overview from './pages/Overview'
 import Screener from './pages/Screener'
@@ -10,8 +8,6 @@ import Logs from './pages/Logs'
 import Advisor from './pages/Advisor'
 
 function App() {
-  const location = useLocation()
-
   return (
     <Routes>
       <Route path="/" element={<Layout />}>

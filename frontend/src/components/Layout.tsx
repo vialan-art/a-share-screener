@@ -2,9 +2,7 @@ import { motion } from 'framer-motion'
 import { Outlet, NavLink, useLocation } from 'react-router-dom'
 import {
   BarChart3,
-  List,
   History,
-  MessageCircle,
   Activity,
   Telescope,
   Sparkles,
