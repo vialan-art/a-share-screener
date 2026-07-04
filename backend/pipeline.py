@@ -46,8 +46,12 @@ class ScreenerPipeline:
                 db.add(FinancialMetric(**data))
         db.commit()
 
-    def run(self, db: Session, max_stocks: int = 5000) -> Dict[str, Any]:
+    def run(self, db: Session, max_stocks: int = 5000, progress_callback=None) -> Dict[str, Any]:
         """运行完整流程。"""
+        def _progress(msg: str):
+            if progress_callback:
+                progress_callback(msg)
+
         start_time = datetime.utcnow()
         log = UpdateLog(status="running", message="开始数据更新", provider=self.provider.name)
         db.add(log)
@@ -61,6 +65,7 @@ class ScreenerPipeline:
         try:
             # 1. 拉取股票列表
             stage_start = datetime.utcnow()
+            _progress("[1/5] 拉取股票列表...")
             print("[1/5] 拉取股票列表...")
             try:
                 stocks = self.provider.get_stock_list()
@@ -85,12 +90,14 @@ class ScreenerPipeline:
                     db.add(Stock(**s))
             db.commit()
             stats["stage_times"]["stock_list"] = (datetime.utcnow() - stage_start).total_seconds()
+            _progress(f"[1/5] 完成，共 {len(stocks)} 只股票")
             print(f"[1/5] 完成，共 {len(stocks)} 只股票")
 
             symbols = [s["symbol"] for s in stocks]
 
             # 2. 拉取财务指标
             stage_start = datetime.utcnow()
+            _progress("[2/5] 拉取财务指标...")
             print("[2/5] 拉取财务指标...")
             try:
                 financial_data = self.provider.get_financial_metrics(symbols)
@@ -106,10 +113,12 @@ class ScreenerPipeline:
                 item["symbol"] = sym
                 metrics_map[sym] = item
             stats["stage_times"]["financial_metrics"] = (datetime.utcnow() - stage_start).total_seconds()
+            _progress(f"[2/5] 完成，财务数据覆盖 {len(metrics_map)} 只股票")
             print(f"[2/5] 完成，财务数据覆盖 {len(metrics_map)} 只股票")
 
             # 3. 拉取行情（估值、动量）并合并
             stage_start = datetime.utcnow()
+            _progress("[3/5] 拉取行情数据...")
             print("[3/5] 拉取行情数据...")
             try:
                 price_data = self.provider.get_daily_prices(symbols)
@@ -125,10 +134,12 @@ class ScreenerPipeline:
                     metrics_map[sym] = {"symbol": sym}
                 metrics_map[sym].update(item)
             stats["stage_times"]["daily_prices"] = (datetime.utcnow() - stage_start).total_seconds()
+            _progress(f"[3/5] 完成，行情数据覆盖 {len(price_data)} 只股票")
             print(f"[3/5] 完成，行情数据覆盖 {len(price_data)} 只股票")
 
             # 4. 数据质量评估
             stage_start = datetime.utcnow()
+            _progress("[4/5] 数据质量评估...")
             print("[4/5] 数据质量评估...")
             quality_reports = DataQualityEngine.evaluate_all(
                 metrics_map, source=self.provider.name, freshness=self.now
@@ -137,6 +148,7 @@ class ScreenerPipeline:
             avg_completeness = DataQualityEngine.average_completeness(quality_reports)
             issue_summary = DataQualityEngine.issue_summary(quality_reports)
             stats["stage_times"]["quality"] = (datetime.utcnow() - stage_start).total_seconds()
+            _progress(f"[4/5] 完成，平均完整度 {avg_completeness:.1%}")
             print(f"[4/5] 完成，平均完整度 {avg_completeness:.1%}")
 
             # 持久化所有指标（包括行情数据）
@@ -144,19 +156,23 @@ class ScreenerPipeline:
 
             # 5. 过滤
             stage_start = datetime.utcnow()
+            _progress("[5/5] 运行过滤...")
             print("[5/5] 运行过滤...")
             filter_results = self.filter_engine.evaluate_batch(stocks, metrics_map)
             passed_symbols = {r.symbol for r in filter_results if r.passed}
             filter_reasons_map = {r.symbol: r.reasons for r in filter_results}
             stats["stage_times"]["filter"] = (datetime.utcnow() - stage_start).total_seconds()
+            _progress(f"[5/5] 完成，{len(passed_symbols)}/{len(stocks)} 只通过过滤")
             print(f"[5/5] 完成，{len(passed_symbols)}/{len(stocks)} 只通过过滤")
 
             # 6. 评分
             stage_start = datetime.utcnow()
+            _progress("[6/6] 运行评分...")
             print("[6/6] 运行评分...")
             passed_stocks = [s for s in stocks if s["symbol"] in passed_symbols]
             score_results = self.scoring_engine.score_batch(passed_stocks, metrics_map)
             stats["stage_times"]["scoring"] = (datetime.utcnow() - stage_start).total_seconds()
+            _progress(f"[6/6] 完成，评分 {len(score_results)} 只股票")
             print(f"[6/6] 完成，评分 {len(score_results)} 只股票")
 
             # 写入评分结果
@@ -188,6 +204,7 @@ class ScreenerPipeline:
 
             # 7. 生成每日快照
             stage_start = datetime.utcnow()
+            _progress("[存档] 保存今日快照...")
             print("[存档] 保存今日快照...")
             snapshot_date = self.now.strftime("%Y-%m-%d")
             db.query(DailySnapshot).filter(DailySnapshot.snapshot_date == snapshot_date).delete()

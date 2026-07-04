@@ -118,13 +118,32 @@ class UpdateLog(Base):
     """数据更新日志。"""
     __tablename__ = "update_logs"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     update_time = Column(DateTime, default=datetime.utcnow)
     status = Column(String(20), comment="success / partial / failed")
     message = Column(Text)
     stocks_count = Column(Integer)
     provider = Column(String(50), comment="使用的数据源")
     completeness_avg = Column(Float, comment="平均字段完整度")
+
+
+class StockPrice(Base):
+    """历史日线行情（后复权），用于回测。"""
+    __tablename__ = "stock_prices"
+
+    id = Column(Integer, primary_key=True)
+    symbol = Column(String(20), index=True, comment="股票代码")
+    trade_date = Column(String(20), index=True, comment="交易日期 YYYYMMDD")
+    open = Column(Float)
+    high = Column(Float)
+    low = Column(Float)
+    close = Column(Float)
+    adj_open = Column(Float, comment="后复权开盘价")
+    adj_close = Column(Float, comment="后复权收盘价")
+    volume = Column(Float)
+    source = Column(String(50), default="tushare", comment="数据来源")
+
+    # ponytail: 简单防止重复写入，生产数据清洗后再加唯一约束
 
 
 class AppConfig(Base):

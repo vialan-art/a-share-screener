@@ -1,17 +1,65 @@
 """FastAPI 路由。"""
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse, PlainTextResponse
 from sqlalchemy.orm import Session
+import threading
+import uuid
 
-from backend.database.connection import get_db
+from backend.database.connection import get_db, SessionLocal
 from backend.database.models import Stock, FinancialMetric, StockScore, DailySnapshot, UpdateLog, AppConfig
 from backend.advisor.service import AIAdvisor
 from backend.pipeline import ScreenerPipeline
 from backend.core.config import Settings, get_settings
 
 router = APIRouter()
+
+# ponytail: in-memory job store for single uvicorn worker. Switch to Redis if scaled.
+_jobs: dict = {}
+_jobs_lock = threading.Lock()
+
+
+def _prune_jobs():
+    cutoff = datetime.utcnow() - timedelta(hours=2)
+    with _jobs_lock:
+        stale = [jid for jid, j in _jobs.items() if j.get("created_at", datetime.utcnow()) < cutoff]
+        for jid in stale:
+            _jobs.pop(jid, None)
+
+
+def _set_job(jid: str, **kwargs):
+    with _jobs_lock:
+        job = _jobs.setdefault(jid, {
+            "id": jid,
+            "status": "queued",
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow(),
+            "progress": "排队中",
+            "result": None,
+            "error": None,
+        })
+        job.update(kwargs)
+        job["updated_at"] = datetime.utcnow()
+
+
+def _execute_pipeline(jid: str):
+    """在后台线程中执行选股流程。"""
+    db = SessionLocal()
+    try:
+        _set_job(jid, status="running", progress="初始化数据源...")
+        from backend.config import get_provider_name, get_config
+        provider_name = get_provider_name()
+        max_stocks = int(get_config("max_stocks", "500"))
+
+        pipeline = ScreenerPipeline(provider_name=provider_name)
+        _set_job(jid, progress="开始拉取数据...")
+        result = pipeline.run(db, max_stocks=max_stocks, progress_callback=lambda msg: _set_job(jid, progress=msg))
+        _set_job(jid, status="success", progress="完成", result=result)
+    except Exception as e:
+        _set_job(jid, status="failed", progress="失败", error=str(e))
+    finally:
+        db.close()
 
 
 def _safe_float(value) -> Optional[float]:
@@ -29,15 +77,33 @@ def health_check():
 
 
 @router.post("/run")
-def run_pipeline(db: Session = Depends(get_db)):
-    """手动触发选股流程。默认使用 mock 数据源保证稳定性，
-    生产环境可通过环境变量或设置页面切换为 akshare / us。"""
-    from backend.config import get_provider_name, get_config
-    provider_name = get_provider_name()
-    max_stocks = int(get_config("max_stocks", "500"))
-    pipeline = ScreenerPipeline(provider_name=provider_name)
-    result = pipeline.run(db, max_stocks=max_stocks)
-    return result
+def run_pipeline():
+    """手动触发选股流程，立即返回 job_id，后台异步执行。
+    客户端通过 /run/status/{job_id} 轮询结果。"""
+    _prune_jobs()
+    jid = str(uuid.uuid4())
+    _set_job(jid, status="queued", progress="排队中")
+    thread = threading.Thread(target=_execute_pipeline, args=(jid,), daemon=True)
+    thread.start()
+    return {"job_id": jid, "status": "queued", "check_url": f"/api/v1/run/status/{jid}"}
+
+
+@router.get("/run/status/{job_id}")
+def get_run_status(job_id: str):
+    """查询选股任务状态。"""
+    with _jobs_lock:
+        job = _jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="任务不存在或已过期")
+    return {
+        "id": job["id"],
+        "status": job["status"],
+        "progress": job["progress"],
+        "result": job["result"],
+        "error": job["error"],
+        "created_at": job["created_at"].isoformat() if job.get("created_at") else None,
+        "updated_at": job["updated_at"].isoformat() if job.get("updated_at") else None,
+    }
 
 
 @router.get("/stocks", response_model=List[dict])
@@ -250,6 +316,86 @@ def get_logs(limit: int = 20, db: Session = Depends(get_db)):
     ]
 
 
+@router.get("/quality/detail")
+def get_quality_detail(db: Session = Depends(get_db)):
+    """获取详细的数据质量监控信息，用于 Dashboard 看板。"""
+    from sqlalchemy import func
+    from backend.database.models import FinancialMetric
+
+    total = db.query(func.count(FinancialMetric.id)).scalar() or 0
+    if total == 0:
+        return {
+            "total": 0,
+            "with_price": 0,
+            "with_profit": 0,
+            "with_debt": 0,
+            "with_cashflow": 0,
+            "field_coverage": {},
+            "recent_logs": [],
+        }
+
+    def ratio(q):
+        return round((db.query(func.count(FinancialMetric.id)).filter(q).scalar() or 0) / total, 4)
+
+    field_coverage = {
+        "latest_price": ratio(FinancialMetric.latest_price != None),
+        "pe_ttm": ratio(FinancialMetric.pe_ttm != None),
+        "pb": ratio(FinancialMetric.pb != None),
+        "roe": ratio(FinancialMetric.roe != None),
+        "revenue": ratio(FinancialMetric.revenue != None),
+        "net_profit": ratio(FinancialMetric.net_profit != None),
+        "profit_growth": ratio(FinancialMetric.profit_growth != None),
+        "debt_to_asset": ratio(FinancialMetric.debt_to_asset != None),
+        "operating_cash_flow": ratio(FinancialMetric.operating_cash_flow != None),
+        "free_cash_flow": ratio(FinancialMetric.free_cash_flow != None),
+        "dividend_yield": ratio(FinancialMetric.dividend_yield != None),
+    }
+
+    recent_logs = db.query(UpdateLog).order_by(UpdateLog.update_time.desc()).limit(7).all()
+
+    return {
+        "total": total,
+        "with_price": ratio(FinancialMetric.latest_price != None),
+        "with_profit": ratio(FinancialMetric.net_profit != None),
+        "with_debt": ratio(FinancialMetric.debt_to_asset != None),
+        "with_cashflow": ratio(FinancialMetric.operating_cash_flow != None),
+        "field_coverage": field_coverage,
+        "recent_logs": [
+            {
+                "time": log.update_time.isoformat(),
+                "status": log.status,
+                "message": log.message,
+                "stocks_count": log.stocks_count,
+                "provider": log.provider,
+                "completeness_avg": log.completeness_avg,
+            }
+            for log in recent_logs
+        ],
+    }
+
+
+@router.get("/backtest/simple")
+def run_simple_backtest(
+    snapshot_date: Optional[str] = None,
+    buy_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    top_n: int = 20,
+    db: Session = Depends(get_db),
+):
+    """最小回测：取快照 Top N 等权重持有至今，对比沪深300。"""
+    from backend.backtest.simple import SimpleBacktest
+
+    engine = SimpleBacktest(db)
+    if snapshot_date or buy_date:
+        return engine.run(
+            snapshot_date=snapshot_date,
+            buy_date=buy_date,
+            end_date=end_date,
+            top_n=top_n,
+        )
+    return {"results": engine.run_multiple_horizons(top_n=top_n)}
+
+
 @router.get("/quality/summary")
 def get_quality_summary(db: Session = Depends(get_db)):
     """获取最新数据质量摘要。"""
@@ -304,6 +450,7 @@ DEFAULT_SETTINGS = {
     "scheduler_time": {"value": "19:00", "description": "每日定时选股时间（HH:MM）"},
     "database_url": {"value": "", "description": "数据库 URL（留空使用默认 SQLite）"},
     "market_region": {"value": "cn", "description": "默认市场：cn（A股）/ us（美股）"},
+    "tushare_token": {"value": "", "description": "Tushare Pro API Token（用于回测历史行情）"},
 }
 
 

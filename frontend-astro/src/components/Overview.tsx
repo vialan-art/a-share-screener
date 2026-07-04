@@ -4,7 +4,10 @@ import {
   fetchLatestSnapshot,
   fetchLogs,
   fetchQualitySummary,
+  fetchQualityDetail,
   runPipeline,
+  fetchRunStatus,
+  fetchBacktest,
   getWatchlistDownloadUrl,
 } from '../services/api'
 import {
@@ -17,6 +20,9 @@ import {
   Activity,
   ShieldAlert,
   Database,
+  CheckCircle2,
+  AlertCircle,
+  History,
 } from 'lucide-react'
 import {
   BarChart,
@@ -86,32 +92,85 @@ function ScoreBar({ label, value }: { label: string; value: number }) {
   )
 }
 
+function CoverageBar({ label, value }: { label: string; value: number }) {
+  const pct = Math.round((value || 0) * 100)
+  return (
+    <div className="flex items-center gap-3 text-xs">
+      <span className="w-20 text-ink-500">{label}</span>
+      <div className="flex-1 h-1.5 bg-ink-200/50 rounded-full overflow-hidden">
+        <div
+          className={`h-full rounded-full ${pct >= 70 ? 'bg-moss' : pct >= 40 ? 'bg-amber-500' : 'bg-rust'}`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <span className="w-10 text-right font-mono text-ink-600">{pct}%</span>
+    </div>
+  )
+}
+
 export default function Overview() {
   const [snapshot, setSnapshot] = useState<any>(null)
   const [logs, setLogs] = useState<any[]>([])
   const [quality, setQuality] = useState<any>(null)
+  const [qualityDetail, setQualityDetail] = useState<any>(null)
+  const [backtest, setBacktest] = useState<any>(null)
   const [loading, setLoading] = useState(false)
+  const [runProgress, setRunProgress] = useState<string | null>(null)
+  const [runError, setRunError] = useState<string | null>(null)
 
   useEffect(() => {
     loadData()
   }, [])
 
   async function loadData() {
-    const [snap, logList, qualityData] = await Promise.all([
+    const [snap, logList, qualityData, qualityDetailData, backtestData] = await Promise.all([
       fetchLatestSnapshot(),
       fetchLogs(),
       fetchQualitySummary(),
+      fetchQualityDetail(),
+      fetchBacktest(),
     ])
     setSnapshot(snap)
     setLogs(logList)
     setQuality(qualityData)
+    setQualityDetail(qualityDetailData)
+    setBacktest(backtestData)
   }
 
   async function handleRun() {
     setLoading(true)
-    await runPipeline()
-    await loadData()
-    setLoading(false)
+    setRunError(null)
+    setRunProgress(null)
+    try {
+      const { job_id } = await runPipeline()
+      pollJob(job_id)
+    } catch (e: any) {
+      setRunError(e.message || '启动失败')
+      setLoading(false)
+    }
+  }
+
+  async function pollJob(jobId: string) {
+    const interval = setInterval(async () => {
+      try {
+        const status = await fetchRunStatus(jobId)
+        setRunProgress(status.progress || status.status)
+        if (status.status === 'success' || status.status === 'failed') {
+          clearInterval(interval)
+          setLoading(false)
+          if (status.status === 'failed') {
+            setRunError(status.error || '运行失败')
+          } else {
+            setRunProgress('完成')
+            await loadData()
+          }
+        }
+      } catch (e: any) {
+        clearInterval(interval)
+        setRunError(e.message || '查询状态失败')
+        setLoading(false)
+      }
+    }, 2000)
   }
 
   const topStocks = snapshot?.items?.slice(0, 8) || []
@@ -139,6 +198,8 @@ export default function Overview() {
       .sort((a, b) => b.count - a.count)
       .slice(0, 8)
   }, [snapshot, meta])
+
+  const backtestResults = backtest?.results || []
 
   return (
     <motion.div
@@ -174,10 +235,20 @@ export default function Overview() {
             className="btn-primary inline-flex items-center gap-2 disabled:opacity-50"
           >
             <RefreshCw size={14} strokeWidth={1.5} className={loading ? 'animate-spin' : ''} />
-            {loading ? '运行中' : '运行选股'}
+            {loading ? (runProgress || '运行中') : '运行选股'}
           </motion.button>
         </div>
       </motion.div>
+
+      {runError && (
+        <motion.div
+          variants={itemVariants}
+          className="marble-card rounded-2xl p-4 border-rust/30 bg-rust/5"
+        >
+          <p className="text-xs text-rust font-medium">运行失败</p>
+          <p className="text-xs text-rust/80 mt-1">{runError}</p>
+        </motion.div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
@@ -223,6 +294,49 @@ export default function Overview() {
           </div>
         </div>
       </motion.div>
+
+      {/* Backtest Preview */}
+      {backtestResults.length > 0 && (
+        <motion.div variants={itemVariants} className="glass-card rounded-2xl p-6">
+          <div className="flex items-center gap-3 mb-6">
+            <History size={18} className="text-moss" />
+            <div>
+              <p className="text-[10px] tracking-[0.2em] text-ink-500 uppercase">Strategy Backtest</p>
+              <h3 className="font-display text-xl text-sumi mt-1">策略历史表现（等权重 Top 20）</h3>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {backtestResults.map((r: any) => {
+              const hasError = r.error || r.portfolio_return === null
+              const portfolioColor = r.portfolio_return > 0 ? 'text-moss' : r.portfolio_return < 0 ? 'text-rust' : 'text-ink-500'
+              const benchmarkColor = r.benchmark_return > 0 ? 'text-moss' : r.benchmark_return < 0 ? 'text-rust' : 'text-ink-500'
+              return (
+                <div key={r.label} className="p-4 rounded-xl border border-ink-200/40 bg-washi/30">
+                  <p className="text-xs text-ink-500 mb-2">{r.label} 买入持有至今</p>
+                  {hasError ? (
+                    <p className="text-xs text-amber-600">{r.error || '缺少历史价格数据'}</p>
+                  ) : (
+                    <>
+                      <p className={`font-serif text-2xl ${portfolioColor}`}>
+                        {r.portfolio_return > 0 ? '+' : ''}{r.portfolio_return}%
+                      </p>
+                      <p className="text-xs text-ink-500 mt-1">
+                        沪深300: <span className={benchmarkColor}>{r.benchmark_return > 0 ? '+' : ''}{r.benchmark_return}%</span>
+                        {' · '}
+                        超额: <span className={r.excess_return > 0 ? 'text-moss' : 'text-rust'}>{r.excess_return > 0 ? '+' : ''}{r.excess_return}%</span>
+                      </p>
+                      <p className="text-[10px] text-ink-400 mt-2">有效股票 {r.valid_stocks}/{r.top_n}</p>
+                    </>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+          <p className="text-[10px] text-ink-400 mt-4 leading-relaxed">
+            说明：基于历史快照选股，等权重买入后持有至今，价格已做后复权处理。此回测仅用于验证策略是否有明显缺陷，不代表未来收益。
+          </p>
+        </motion.div>
+      )}
 
       {/* Main Content */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -331,6 +445,59 @@ export default function Overview() {
             ) : (
               <p className="text-sm text-ink-500">暂无数据</p>
             )}
+          </motion.div>
+
+          <motion.div variants={itemVariants} className="glass-card rounded-2xl p-6">
+            <p className="text-[10px] tracking-[0.2em] text-ink-500 uppercase mb-4">
+              Data Quality
+            </p>
+            <div className="space-y-3">
+              <CoverageBar label="最新价" value={qualityDetail?.field_coverage?.latest_price} />
+              <CoverageBar label="PE TTM" value={qualityDetail?.field_coverage?.pe_ttm} />
+              <CoverageBar label="PB" value={qualityDetail?.field_coverage?.pb} />
+              <CoverageBar label="ROE" value={qualityDetail?.field_coverage?.roe} />
+              <CoverageBar label="净利润" value={qualityDetail?.field_coverage?.net_profit} />
+              <CoverageBar label="净利润增长" value={qualityDetail?.field_coverage?.profit_growth} />
+              <CoverageBar label="资产负债率" value={qualityDetail?.field_coverage?.debt_to_asset} />
+              <CoverageBar label="经营现金流" value={qualityDetail?.field_coverage?.operating_cash_flow} />
+              <CoverageBar label="股息率" value={qualityDetail?.field_coverage?.dividend_yield} />
+            </div>
+            <div className="mt-4 pt-4 border-t border-ink-200/40 flex items-center gap-2 text-xs text-ink-500">
+              {qualityDetail?.total ? (
+                <>
+                  <Database size={12} />
+                  共 {qualityDetail.total} 条财务记录
+                </>
+              ) : (
+                <span>暂无数据</span>
+              )}
+            </div>
+          </motion.div>
+
+          <motion.div variants={itemVariants} className="glass-card rounded-2xl p-6">
+            <p className="text-[10px] tracking-[0.2em] text-ink-500 uppercase mb-4">
+              Recent Updates
+            </p>
+            <div className="space-y-3">
+              {(qualityDetail?.recent_logs || []).slice(0, 5).map((log: any, idx: number) => (
+                <div key={idx} className="flex items-start gap-2 text-xs">
+                  {log.status === 'success' ? (
+                    <CheckCircle2 size={12} className="text-moss mt-0.5 shrink-0" />
+                  ) : (
+                    <AlertCircle size={12} className="text-amber-600 mt-0.5 shrink-0" />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sumi truncate">{log.message}</p>
+                    <p className="text-ink-500 mt-0.5">
+                      {new Date(log.time).toLocaleString('zh-CN')} · {log.provider || 'unknown'} · {log.stocks_count ?? '—'} 只
+                    </p>
+                  </div>
+                </div>
+              ))}
+              {(qualityDetail?.recent_logs || []).length === 0 && (
+                <p className="text-sm text-ink-500">暂无更新记录</p>
+              )}
+            </div>
           </motion.div>
 
           <motion.div variants={itemVariants} className="glass-card rounded-2xl p-6">

@@ -21,11 +21,12 @@ import pandas as pd
 from backend.data.provider import DataProvider
 
 
-# 允许通过环境变量控制请求重试
+# 允许通过环境变量控制请求重试和行业在线拉取
 AKSHARE_MAX_RETRIES = int(os.environ.get("AKSHARE_MAX_RETRIES", "5"))
 AKSHARE_BASE_DELAY = float(os.environ.get("AKSHARE_BASE_DELAY", "2.0"))
 AKSHARE_MAX_DELAY = float(os.environ.get("AKSHARE_MAX_DELAY", "30.0"))
 AKSHARE_JITTER = float(os.environ.get("AKSHARE_JITTER", "0.5"))
+AKSHARE_FETCH_INDUSTRY_ONLINE = os.environ.get("AKSHARE_FETCH_INDUSTRY_ONLINE", "false").lower() in ("1", "true", "yes")
 
 # 行业映射缓存文件路径
 INDUSTRY_CACHE_FILE = os.environ.get(
@@ -207,14 +208,20 @@ class AkShareProvider(DataProvider):
         return pd.DataFrame()
 
     def get_stock_list(self) -> List[Dict[str, Any]]:
-        """获取 A股所有股票列表，并补充行业分类。"""
+        """获取 A股所有股票列表，并补充行业分类。默认剔除 ST / *ST / 退市股票。"""
         df = self._ak_stock_info_a_code_name()
         industry_map = self._build_industry_map()
 
         result = []
+        skipped_st = 0
         for _, row in df.iterrows():
             symbol = str(row["code"]).strip().zfill(6)
             name = str(row["name"]).strip()
+
+            # 过滤 ST / *ST / 退市风险
+            if name.startswith("*ST") or name.startswith("ST") or "退" in name:
+                skipped_st += 1
+                continue
 
             if symbol.startswith(("60", "68", "88", "89")):
                 market = "SH"
@@ -235,6 +242,7 @@ class AkShareProvider(DataProvider):
                 "market": market,
             })
 
+        print(f"[AkShareProvider] 剔除 ST/退市股票 {skipped_st} 只，剩余 {len(result)} 只")
         return result
 
     def _build_industry_map(self) -> Dict[str, str]:
@@ -272,19 +280,28 @@ class AkShareProvider(DataProvider):
         # 3. 静态 fallback（最后手段）
         static_map = self._load_static_fallback()
 
-        # 4. 尝试在线获取并合并到静态 fallback
-        try:
-            online_map = self._fetch_industry_map_online()
-            if online_map:
-                static_map.update(online_map)
-                _save_json_map(INDUSTRY_CACHE_FILE, static_map)
-                cache_df = pd.DataFrame([
-                    {"symbol": k, "industry": v} for k, v in static_map.items()
-                ])
-                AkShareProvider._industry_cache = cache_df
-                AkShareProvider._industry_cache_time = now
-        except Exception as e:
-            print(f"[AkShare] 在线行业映射获取失败，使用静态 fallback: {e}")
+        # 4. 在线获取行业映射（默认关闭，避免每次运行都缓慢拉取东财板块）
+        if AKSHARE_FETCH_INDUSTRY_ONLINE:
+            try:
+                online_map = self._fetch_industry_map_online()
+                if online_map:
+                    static_map.update(online_map)
+                    _save_json_map(INDUSTRY_CACHE_FILE, static_map)
+                    cache_df = pd.DataFrame([
+                        {"symbol": k, "industry": v} for k, v in static_map.items()
+                    ])
+                    AkShareProvider._industry_cache = cache_df
+                    AkShareProvider._industry_cache_time = now
+            except Exception as e:
+                print(f"[AkShare] 在线行业映射获取失败，使用静态 fallback: {e}")
+        else:
+            # 即使是在线拉取关闭，也把静态 fallback 写入内存/磁盘缓存，避免重复加载
+            _save_json_map(INDUSTRY_CACHE_FILE, static_map)
+            cache_df = pd.DataFrame([
+                {"symbol": k, "industry": v} for k, v in static_map.items()
+            ])
+            AkShareProvider._industry_cache = cache_df
+            AkShareProvider._industry_cache_time = now
 
         return static_map
 

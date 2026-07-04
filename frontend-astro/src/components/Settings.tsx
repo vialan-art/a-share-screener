@@ -22,7 +22,7 @@ const settingGroups = [
   {
     title: '数据源',
     icon: Database,
-    keys: ['data_provider', 'max_stocks', 'market_region'],
+    keys: ['data_provider', 'max_stocks', 'market_region', 'tushare_token'],
   },
   {
     title: '系统',
@@ -40,6 +40,7 @@ const fieldLabels: Record<string, string> = {
   scheduler_time: '定时时间',
   database_url: '数据库 URL',
   market_region: '默认市场',
+  tushare_token: 'Tushare Token',
 }
 
 export default function Settings() {
@@ -159,7 +160,7 @@ export default function Settings() {
                     </select>
                   ) : (
                     <input
-                      type={key.includes('api_key') ? 'password' : 'text'}
+                      type={key.includes('api_key') || key.includes('token') ? 'password' : 'text'}
                       value={item.value}
                       onChange={(e) => updateValue(key, e.target.value)}
                       placeholder={item.description}

@@ -12,3 +12,5 @@ python-dotenv>=1.0.0
 schedule>=1.2.0
 python-multipart>=0.0.9
 yfinance>=0.2.40
+tushare>=1.2.0
+baostock>=0.8.8

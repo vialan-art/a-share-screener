@@ -28,6 +28,11 @@ export async function runPipeline() {
   return res.json()
 }
 
+export async function fetchRunStatus(jobId: string) {
+  const res = await fetch(`${API_BASE}/run/status/${jobId}`)
+  return res.json()
+}
+
 export async function fetchLogs() {
   const res = await fetch(`${API_BASE}/logs`)
   return res.json()
@@ -37,6 +42,17 @@ export async function fetchQualitySummary() {
   const res = await fetch(`${API_BASE}/quality/summary`)
   return res.json()
 }
+
+export async function fetchBacktest() {
+  const res = await fetch(`${API_BASE}/backtest/simple`)
+  return res.json()
+}
+
+export async function fetchQualityDetail() {
+  const res = await fetch(`${API_BASE}/quality/detail`)
+  return res.json()
+}
+
 
 export function getWatchlistDownloadUrl(): string {
   return `${API_BASE}/export/watchlist`
