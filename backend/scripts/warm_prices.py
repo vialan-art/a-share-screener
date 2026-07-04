@@ -10,7 +10,7 @@
     --years: 拉取历史年数，默认 3
     --limit: 0 表示全市场，>0 表示只预热前 N 只
     --index: 同时预热沪深300，默认开启
-    --batch: 每批处理的股票数量，默认 100（BaoStock 单 session 建议不超过 300）
+    --batch: 每批处理的股票数量，默认 10（BaoStock 单 session 建议 5~10）
 """
 import argparse
 import sys
@@ -31,7 +31,7 @@ def main():
     parser.add_argument("--years", type=int, default=3, help="历史年数")
     parser.add_argument("--limit", type=int, default=0, help="限制股票数量，0=全市场")
     parser.add_argument("--index", action="store_true", default=True, help="是否预热沪深300")
-    parser.add_argument("--batch", type=int, default=100, help="BaoStock 批量 session 大小")
+    parser.add_argument("--batch", type=int, default=10, help="BaoStock 批量 session 大小，建议 5~10")
     args = parser.parse_args()
 
     db = SessionLocal()

@@ -135,12 +135,19 @@ def fetch_hist_daily_batch(
 ) -> Dict[str, Optional[pd.DataFrame]]:
     """批量拉多只股票历史日线，复用同一个 BaoStock session。
 
-    比单只循环 login/logout 快 5~10 倍，适合全市场预热。
+    注意：BaoStock 服务端对单 session 查询次数有限制，建议 batch 不超过 10。
+    超过会报 10001001 用户未登录，此时需要重新 login。
     """
     import baostock as bs
+    import time
+
+    result = {}
     lg = bs.login()
+    if lg.error_code != "0":
+        print(f"[BaoStock] batch login failed: {lg.error_code} {lg.error_msg}")
+        return {s: None for s in symbols}
+
     try:
-        result = {}
         for symbol in symbols:
             try:
                 df = fetch_hist_daily(symbol, start_date, end_date, adjust, bs=bs)
@@ -148,9 +155,11 @@ def fetch_hist_daily_batch(
             except Exception as e:
                 print(f"[BaoStock] batch {symbol} failed: {e}")
                 result[symbol] = None
-        return result
+            # BaoStock 服务端限制单 session 频次，短暂 sleep 降低掉线概率
+            time.sleep(0.05)
     finally:
         bs.logout()
+    return result
 
 
 def fetch_index_daily(
