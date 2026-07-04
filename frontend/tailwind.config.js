@@ -32,6 +32,7 @@ export default {
         mist: '#b8b5ad',
       },
       fontFamily: {
+        display: ['"Cormorant Garamond"', '"Noto Serif SC"', 'Georgia', 'serif'],
         serif: ['"Noto Serif SC"', 'Georgia', 'serif'],
         sans: ['"Inter"', '"Noto Sans SC"', 'system-ui', 'sans-serif'],
         mono: ['"JetBrains Mono"', 'monospace'],

@@ -6,6 +6,7 @@ import StockDetail from './pages/StockDetail'
 import History from './pages/History'
 import Logs from './pages/Logs'
 import Advisor from './pages/Advisor'
+import Settings from './pages/Settings'
 
 function App() {
   return (
@@ -17,6 +18,7 @@ function App() {
         <Route path="history" element={<History />} />
         <Route path="logs" element={<Logs />} />
         <Route path="advisor" element={<Advisor />} />
+        <Route path="settings" element={<Settings />} />
       </Route>
     </Routes>
   )

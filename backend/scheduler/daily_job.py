@@ -10,19 +10,18 @@ from datetime import datetime
 
 from backend.database.connection import SessionLocal
 from backend.pipeline import ScreenerPipeline
-
-
-# 数据源可通过环境变量切换：mock / akshare
-SCREENER_PROVIDER = os.environ.get("SCREENER_PROVIDER", "mock")
+from backend.config import get_provider_name, get_config
 
 
 def job():
     """定时执行的任务。"""
-    print(f"[{datetime.now().isoformat()}] 开始定时选股任务 (provider={SCREENER_PROVIDER})")
+    provider = get_provider_name()
+    max_stocks = int(get_config("max_stocks", "500"))
+    print(f"[{datetime.now().isoformat()}] 开始定时选股任务 (provider={provider}, max_stocks={max_stocks})")
     db = SessionLocal()
     try:
-        pipeline = ScreenerPipeline(provider_name=SCREENER_PROVIDER)
-        result = pipeline.run(db, max_stocks=500)
+        pipeline = ScreenerPipeline(provider_name=provider)
+        result = pipeline.run(db, max_stocks=max_stocks)
         print(f"任务完成: {result}")
     except Exception as e:
         print(f"任务失败: {e}")

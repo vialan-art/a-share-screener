@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Noto+Sans+SC:wght@300;400;500;700&family=Noto+Serif+SC:wght@300;400;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,400&family=Inter:wght@300;400;500;600&family=Noto+Sans+SC:wght@300;400;500;700&family=Noto+Serif+SC:wght@300;400;500;600&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -34,6 +34,11 @@ body {
   background-attachment: fixed;
 }
 
+h1, h2, h3, h4, h5, h6, .font-display {
+  font-family: 'Cormorant Garamond', 'Noto Serif SC', Georgia, serif;
+  letter-spacing: -0.02em;
+}
+
 /* 滚动条 */
 ::-webkit-scrollbar {
   width: 6px;
@@ -61,7 +66,7 @@ body {
 
 /* 液态玻璃卡片 */
 .glass-card {
-  @apply relative bg-white/55 backdrop-blur-2xl border border-white/50;
+  @apply relative bg-white/55 backdrop-blur-2xl border border-white/50 rounded-2xl;
   box-shadow:
     inset 0 1px 1px rgba(255, 255, 255, 0.7),
     inset 0 -1px 1px rgba(44, 42, 38, 0.02),
@@ -88,7 +93,7 @@ body {
 
 /* 大理石纹理强调卡片 */
 .marble-card {
-  @apply relative bg-white/60 backdrop-blur-xl border border-white/45;
+  @apply relative bg-white/60 backdrop-blur-xl border border-white/45 rounded-2xl;
   background-image:
     url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='m'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.018' numOctaves='4' seed='3'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncR type='linear' slope='0.12' intercept='0.94'/%3E%3CfeFuncG type='linear' slope='0.12' intercept='0.92'/%3E%3CfeFuncB type='linear' slope='0.12' intercept='0.90'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23m)' opacity='0.35'/%3E%3C/svg%3E");
   box-shadow:
@@ -145,7 +150,7 @@ body {
 /* 按钮 */
 .btn-primary {
   @apply px-5 py-2.5 bg-sumi text-ink-50 font-medium text-sm tracking-wide
-         rounded-md transition-all duration-300 hover:bg-ink-800
+         rounded-xl transition-all duration-300 hover:bg-ink-800
          focus:outline-none focus:ring-2 focus:ring-moss/30;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.12),
@@ -154,7 +159,7 @@ body {
 
 .btn-secondary {
   @apply px-5 py-2.5 border border-ink-300 text-ink-700 font-medium text-sm tracking-wide
-         rounded-md transition-all duration-300 hover:bg-ink-100 hover:border-ink-400
+         rounded-xl transition-all duration-300 hover:bg-ink-100 hover:border-ink-400
          focus:outline-none focus:ring-2 focus:ring-moss/20;
   background: rgba(255, 255, 255, 0.35);
   backdrop-filter: blur(12px);

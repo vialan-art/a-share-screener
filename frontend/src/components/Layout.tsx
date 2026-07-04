@@ -6,6 +6,7 @@ import {
   Activity,
   Telescope,
   Sparkles,
+  Settings,
 } from 'lucide-react'
 
 const navItems = [
@@ -14,6 +15,7 @@ const navItems = [
   { to: '/history', icon: History, label: '历史', labelEn: 'History' },
   { to: '/logs', icon: Activity, label: '日志', labelEn: 'Logs' },
   { to: '/advisor', icon: Sparkles, label: 'Advisor', labelEn: 'AI' },
+  { to: '/settings', icon: Settings, label: '设置', labelEn: 'Settings' },
 ]
 
 function NavItem({ to, icon: Icon, label, labelEn, isActive }: typeof navItems[0] & { isActive: boolean }) {
@@ -69,7 +71,7 @@ export default function Layout() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
           >
-            <h1 className="font-serif text-2xl font-semibold text-sumi tracking-wide">
+            <h1 className="font-display text-2xl font-semibold text-sumi tracking-wide">
               选股
             </h1>
             <p className="text-[10px] tracking-[0.25em] text-ink-500 uppercase mt-1">

@@ -2,12 +2,14 @@
 from backend.data.provider import DataProvider
 from backend.data.akshare_provider import AkShareProvider
 from backend.data.mock_provider import MockProvider
+from backend.data.us_provider import USProvider
 
 
 # 把数据源名称映射到具体实现
 PROVIDERS = {
     "akshare": AkShareProvider,
     "mock": MockProvider,
+    "us": USProvider,
     # 以后可以在这里加：tushare、yfinance 等
 }
 

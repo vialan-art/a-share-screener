@@ -50,3 +50,22 @@ export async function advisorChat(messages: { role: string; content: string }[])
   })
   return res.json()
 }
+
+export async function fetchSettings() {
+  const res = await fetch(`${API_BASE}/settings`)
+  return res.json()
+}
+
+export async function updateSettings(settings: Record<string, string>) {
+  const res = await fetch(`${API_BASE}/settings`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(settings),
+  })
+  return res.json()
+}
+
+export async function resetSettings() {
+  const res = await fetch(`${API_BASE}/settings/reset`, { method: 'POST' })
+  return res.json()
+}

@@ -125,3 +125,14 @@ class UpdateLog(Base):
     stocks_count = Column(Integer)
     provider = Column(String(50), comment="使用的数据源")
     completeness_avg = Column(Float, comment="平均字段完整度")
+
+
+class AppConfig(Base):
+    """应用配置表（前端设置页面可编辑）。"""
+    __tablename__ = "app_configs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    key = Column(String(100), unique=True, index=True, comment="配置键")
+    value = Column(Text, comment="配置值（JSON 字符串）")
+    description = Column(String(255), comment="配置说明")
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

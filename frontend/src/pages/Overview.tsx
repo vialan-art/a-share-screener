@@ -154,7 +154,7 @@ export default function Overview() {
           <p className="text-[10px] tracking-[0.25em] text-ink-500 uppercase mb-2">
             Dashboard
           </p>
-          <h2 className="font-serif text-4xl text-sumi">系统概览</h2>
+          <h2 className="font-display text-4xl text-sumi">系统概览</h2>
         </div>
         <div className="flex gap-3">
           <motion.a
@@ -232,7 +232,7 @@ export default function Overview() {
           <div className="flex items-center justify-between mb-6">
             <div>
               <p className="text-[10px] tracking-[0.2em] text-ink-500 uppercase">Top Rankings</p>
-              <h3 className="font-serif text-xl text-sumi mt-1">今日优选</h3>
+              <h3 className="font-display text-xl text-sumi mt-1">今日优选</h3>
             </div>
             <Link
               to="/screener"

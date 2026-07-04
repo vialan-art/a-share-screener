@@ -10,10 +10,7 @@
 import json
 from typing import List, Dict, Any, AsyncGenerator
 import httpx
-from backend.core.config import get_settings
-
-
-settings = get_settings()
+from backend.config import get_config
 
 
 class AIAdvisor:
@@ -25,17 +22,22 @@ class AIAdvisor:
 如果有不确定的地方，请明确说明。"""
 
     def __init__(self):
-        self.enabled = settings.ai_advisor_enabled
-        self.api_url = settings.ai_advisor_api_url
-        self.api_key = settings.ai_advisor_api_key
-        self.model = settings.ai_advisor_model
-        self.temperature = settings.ai_advisor_temperature
+        # 优先读取数据库配置，无值则使用环境变量/默认值
+        base_url = get_config("ai_base_url", "")
+        api_key = get_config("ai_api_key", "")
+        model = get_config("ai_model", "gpt-4o-mini")
+
+        self.enabled = bool(base_url and api_key)
+        self.api_url = f"{base_url.rstrip('/')}/chat/completions" if base_url else ""
+        self.api_key = api_key
+        self.model = model
+        self.temperature = 0.7
 
     async def chat(self, messages: List[Dict[str, str]]) -> Dict[str, Any]:
         """非流式对话。"""
         if not self.enabled:
             return {
-                "content": "AI 顾问未启用。请在 .env 中设置 AI_ADVISOR_ENABLED=true 和 API Key。",
+                "content": "AI 顾问未启用。请在设置页面填写 AI Base URL 和 API Key。",
                 "model": self.model,
             }
 
@@ -70,7 +72,7 @@ class AIAdvisor:
     async def chat_stream(self, messages: List[Dict[str, str]]) -> AsyncGenerator[str, None]:
         """流式对话（SSE 格式）。"""
         if not self.enabled:
-            yield "AI 顾问未启用。请在 .env 中设置 AI_ADVISOR_ENABLED=true 和 API Key。"
+            yield "AI 顾问未启用。请在设置页面填写 AI Base URL 和 API Key。"
             return
 
         headers = {

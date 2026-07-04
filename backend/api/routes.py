@@ -6,9 +6,10 @@ from fastapi.responses import StreamingResponse, PlainTextResponse
 from sqlalchemy.orm import Session
 
 from backend.database.connection import get_db
-from backend.database.models import Stock, FinancialMetric, StockScore, DailySnapshot, UpdateLog
+from backend.database.models import Stock, FinancialMetric, StockScore, DailySnapshot, UpdateLog, AppConfig
 from backend.advisor.service import AIAdvisor
 from backend.pipeline import ScreenerPipeline
+from backend.core.config import Settings, get_settings
 
 router = APIRouter()
 
@@ -30,11 +31,12 @@ def health_check():
 @router.post("/run")
 def run_pipeline(db: Session = Depends(get_db)):
     """手动触发选股流程。默认使用 mock 数据源保证稳定性，
-    生产环境可通过环境变量切换为 akshare。"""
-    import os
-    provider_name = os.environ.get("SCREENER_PROVIDER", "mock")
+    生产环境可通过环境变量或设置页面切换为 akshare / us。"""
+    from backend.config import get_provider_name, get_config
+    provider_name = get_provider_name()
+    max_stocks = int(get_config("max_stocks", "500"))
     pipeline = ScreenerPipeline(provider_name=provider_name)
-    result = pipeline.run(db, max_stocks=500)
+    result = pipeline.run(db, max_stocks=max_stocks)
     return result
 
 
@@ -290,3 +292,54 @@ async def advisor_chat_stream(request: dict):
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+# 默认配置项：前端设置页面展示的字段
+DEFAULT_SETTINGS = {
+    "ai_base_url": {"value": "", "description": "AI 助手 API Base URL（OpenAI 兼容）"},
+    "ai_api_key": {"value": "", "description": "AI 助手 API Key"},
+    "ai_model": {"value": "gpt-4o-mini", "description": "AI 助手模型名称"},
+    "data_provider": {"value": "mock", "description": "默认数据源：mock / akshare / us"},
+    "max_stocks": {"value": "500", "description": "单次选股最大股票数量"},
+    "scheduler_time": {"value": "19:00", "description": "每日定时选股时间（HH:MM）"},
+    "database_url": {"value": "", "description": "数据库 URL（留空使用默认 SQLite）"},
+    "market_region": {"value": "cn", "description": "默认市场：cn（A股）/ us（美股）"},
+}
+
+
+@router.get("/settings")
+def get_settings(db: Session = Depends(get_db)):
+    """获取所有应用配置。"""
+    configs = db.query(AppConfig).all()
+    result = {k: {"value": v["value"], "description": v["description"]} for k, v in DEFAULT_SETTINGS.items()}
+    for c in configs:
+        if c.key in result:
+            result[c.key]["value"] = c.value
+    return result
+
+
+@router.post("/settings")
+def update_settings(request: dict, db: Session = Depends(get_db)):
+    """更新应用配置。"""
+    for key, value in request.items():
+        if key not in DEFAULT_SETTINGS:
+            continue
+        existing = db.query(AppConfig).filter(AppConfig.key == key).first()
+        if existing:
+            existing.value = str(value)
+        else:
+            db.add(AppConfig(
+                key=key,
+                value=str(value),
+                description=DEFAULT_SETTINGS[key]["description"],
+            ))
+    db.commit()
+    return {"status": "ok"}
+
+
+@router.post("/settings/reset")
+def reset_settings(db: Session = Depends(get_db)):
+    """重置所有配置为默认值。"""
+    db.query(AppConfig).delete()
+    db.commit()
+    return {"status": "ok"}

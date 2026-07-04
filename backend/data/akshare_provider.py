@@ -12,6 +12,7 @@
 import os
 import time
 import math
+import json
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 from functools import wraps
@@ -25,6 +26,16 @@ AKSHARE_MAX_RETRIES = int(os.environ.get("AKSHARE_MAX_RETRIES", "5"))
 AKSHARE_BASE_DELAY = float(os.environ.get("AKSHARE_BASE_DELAY", "2.0"))
 AKSHARE_MAX_DELAY = float(os.environ.get("AKSHARE_MAX_DELAY", "30.0"))
 AKSHARE_JITTER = float(os.environ.get("AKSHARE_JITTER", "0.5"))
+
+# 行业映射缓存文件路径
+INDUSTRY_CACHE_FILE = os.environ.get(
+    "INDUSTRY_CACHE_FILE",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "industry_cache.json"),
+)
+STATIC_INDUSTRY_FILE = os.environ.get(
+    "STATIC_INDUSTRY_FILE",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "static_industry_map.json"),
+)
 
 
 def _retry_with_backoff(max_retries: int = AKSHARE_MAX_RETRIES):
@@ -54,6 +65,30 @@ def _retry_with_backoff(max_retries: int = AKSHARE_MAX_RETRIES):
     return decorator
 
 
+def _load_json_map(path: str) -> Dict[str, str]:
+    """从 JSON 文件加载映射。"""
+    if not os.path.exists(path):
+        return {}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            if isinstance(data, dict):
+                return {str(k).strip().zfill(6): str(v).strip() for k, v in data.items() if v}
+    except Exception as e:
+        print(f"[AkShare] 加载映射文件失败 {path}: {e}")
+    return {}
+
+
+def _save_json_map(path: str, data: Dict[str, str]):
+    """保存映射到 JSON 文件。"""
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"[AkShare] 保存映射文件失败 {path}: {e}")
+
+
 class AkShareProvider(DataProvider):
     """A股数据源：AkShare（生产级优化）。"""
 
@@ -62,9 +97,65 @@ class AkShareProvider(DataProvider):
     _industry_cache_time: Optional[datetime] = None
     _industry_cache_ttl = timedelta(hours=6)
 
+    # 静态 fallback：常见股票行业映射
+    _static_industry_map: Optional[Dict[str, str]] = None
+
     @property
     def name(self) -> str:
         return "akshare"
+
+    def _load_static_fallback(self) -> Dict[str, str]:
+        """加载静态行业 fallback（文件不存在时使用内置简表）。"""
+        if AkShareProvider._static_industry_map is None:
+            file_map = _load_json_map(STATIC_INDUSTRY_FILE)
+            # 内置简表：覆盖部分常见大盘股
+            built_in = self._built_in_industry_map()
+            built_in.update(file_map)  # 文件覆盖内置
+            AkShareProvider._static_industry_map = built_in
+        return AkShareProvider._static_industry_map
+
+    @staticmethod
+    def _built_in_industry_map() -> Dict[str, str]:
+        """内置常见 A 股行业映射（不完全覆盖）。"""
+        return {
+            "000001": "银行", "000002": "房地产", "000063": "通信", "000066": "计算机",
+            "000100": "电子", "000333": "家用电器", "000538": "医药生物", "000568": "食品饮料",
+            "000651": "家用电器", "000725": "电子", "000768": "国防军工", "000858": "食品饮料",
+            "000895": "食品饮料", "002001": "医药生物", "002007": "医药生物", "002024": "商贸零售",
+            "002027": "传媒", "002044": "医药生物", "002049": "电子", "002120": "交通运输",
+            "002142": "银行", "002230": "计算机", "002236": "计算机", "002271": "建筑材料",
+            "002304": "食品饮料", "002352": "交通运输", "002415": "计算机", "002460": "有色金属",
+            "002475": "电子", "002594": "汽车", "002600": "电子", "002624": "传媒",
+            "002648": "石油石化", "002714": "农林牧渔", "002812": "电力设备", "002821": "医药生物",
+            "300003": "医药生物", "300014": "电子", "300015": "医药生物", "300033": "计算机",
+            "300059": "非银金融", "300122": "医药生物", "300124": "电力设备", "300142": "医药生物",
+            "300274": "电力设备", "300408": "电子", "300413": "传媒", "300433": "电子",
+            "300498": "农林牧渔", "300750": "电力设备", "600000": "银行", "600009": "交通运输",
+            "600016": "银行", "600028": "石油石化", "600030": "非银金融", "600031": "机械设备",
+            "600036": "银行", "600048": "房地产", "600050": "通信", "600104": "汽车",
+            "600109": "非银金融", "600111": "有色金属", "600115": "交通运输", "600132": "食品饮料",
+            "600150": "国防军工", "600176": "建筑材料", "600196": "医药生物", "600276": "医药生物",
+            "600309": "基础化工", "600340": "房地产", "600346": "石油石化", "600406": "计算机",
+            "600436": "医药生物", "600438": "电力设备", "600519": "食品饮料", "600547": "有色金属",
+            "600570": "计算机", "600585": "建筑材料", "600588": "计算机", "600600": "食品饮料",
+            "600660": "汽车", "600690": "家用电器", "600703": "电子", "600745": "电子",
+            "600809": "食品饮料", "600837": "非银金融", "600887": "食品饮料", "600893": "国防军工",
+            "600900": "公用事业", "600919": "银行", "600958": "非银金融", "600999": "非银金融",
+            "601012": "电力设备", "601066": "非银金融", "601088": "煤炭", "601111": "交通运输",
+            "601117": "建筑装饰", "601138": "电子", "601166": "银行", "601169": "银行",
+            "601186": "建筑装饰", "601211": "非银金融", "601225": "煤炭", "601288": "银行",
+            "601318": "非银金融", "601319": "非银金融", "601328": "银行", "601336": "非银金融",
+            "601360": "计算机", "601398": "银行", "601628": "非银金融", "601633": "汽车",
+            "601668": "建筑装饰", "601688": "非银金融", "601698": "国防军工", "601818": "银行",
+            "601857": "石油石化", "601877": "电力设备", "601888": "商贸零售", "601899": "有色金属",
+            "601901": "非银金融", "601933": "商贸零售", "601939": "银行", "601955": "公用事业",
+            "601985": "公用事业", "601988": "银行", "601989": "国防军工", "601998": "银行",
+            "603019": "计算机", "603288": "食品饮料", "603501": "电子", "603658": "医药生物",
+            "603799": "有色金属", "603986": "电子", "603993": "有色金属", "605117": "电子",
+            "688001": "国防军工", "688002": "电子", "688009": "机械设备", "688012": "电子",
+            "688036": "电子", "688111": "传媒", "688169": "家用电器", "688187": "医药生物",
+            "688303": "电力设备", "688599": "电力设备", "688981": "电子",
+        }
 
     @_retry_with_backoff()
     def _ak_stock_info_a_code_name(self) -> pd.DataFrame:
@@ -92,6 +183,16 @@ class AkShareProvider(DataProvider):
         return ak.stock_board_industry_cons_em(symbol=symbol)
 
     @_retry_with_backoff()
+    def _ak_stock_individual_info_em(self, symbol: str) -> pd.DataFrame:
+        import akshare as ak
+        return ak.stock_individual_info_em(symbol=symbol)
+
+    @_retry_with_backoff()
+    def _ak_stock_industry_change_cninfo(self, symbol: str) -> pd.DataFrame:
+        import akshare as ak
+        return ak.stock_industry_change_cninfo(symbol=symbol)
+
+    @_retry_with_backoff()
     def _ak_stock_yjbb_em_detail(self) -> pd.DataFrame:
         """备用：获取更详细的业绩报告数据（年报/季报）。"""
         import akshare as ak
@@ -112,7 +213,7 @@ class AkShareProvider(DataProvider):
 
         result = []
         for _, row in df.iterrows():
-            symbol = str(row["code"]).strip()
+            symbol = str(row["code"]).strip().zfill(6)
             name = str(row["name"]).strip()
 
             if symbol.startswith(("60", "68", "88", "89")):
@@ -139,10 +240,15 @@ class AkShareProvider(DataProvider):
     def _build_industry_map(self) -> Dict[str, str]:
         """构建股票代码到行业的映射。
 
-        策略：使用东方财富行业板块，按板块代码迭代获取成分股。
-        结果缓存 6 小时，避免频繁请求。
+        策略：
+        1. 优先读取磁盘缓存（6 小时内）。
+        2. 尝试东方财富行业板块成分股。
+        3. 尝试个股信息接口补充。
+        4. 最后使用内置静态 fallback。
         """
         now = datetime.utcnow()
+
+        # 1. 内存缓存
         if (
             AkShareProvider._industry_cache is not None
             and AkShareProvider._industry_cache_time is not None
@@ -153,55 +259,67 @@ class AkShareProvider(DataProvider):
                 AkShareProvider._industry_cache["industry"]
             ))
 
-        print("[AkShare] 构建行业映射...")
-        industry_map = {}
-        try:
-            boards_df = self._ak_stock_board_industry_name_em()
-            if "板块名称" not in boards_df.columns or "板块代码" not in boards_df.columns:
-                print("[AkShare] 行业板块列表字段异常")
-                return industry_map
-
-            # 选择数量最多的几个主要行业，减少请求量
-            # 也可以全量拉取，但耗时较长
-            board_rows = boards_df[["板块名称", "板块代码"]].to_dict("records")
-            print(f"[AkShare] 发现 {len(board_rows)} 个行业板块")
-
-            success_count = 0
-            for idx, row in enumerate(board_rows):
-                board_name = str(row["板块名称"]).strip()
-                board_code = str(row["板块代码"]).strip()
-                if not board_code.startswith("BK"):
-                    continue
-                try:
-                    cons_df = self._ak_stock_board_industry_cons_em(symbol=board_code)
-                    if cons_df is None or cons_df.empty:
-                        continue
-                    if "代码" not in cons_df.columns:
-                        continue
-                    for _, r in cons_df.iterrows():
-                        sym = str(r["代码"]).strip()
-                        # 一只股票可能属于多个板块，保留第一个（通常是最细分的）
-                        if sym and sym not in industry_map:
-                            industry_map[sym] = board_name
-                    success_count += 1
-                    # 每 10 个板块暂停一下，降低被限流概率
-                    if (idx + 1) % 10 == 0:
-                        time.sleep(1)
-                except Exception as e:
-                    print(f"[AkShare] 获取板块 {board_name} 成分股失败: {e}")
-                    continue
-
-            print(f"[AkShare] 行业映射完成：{success_count}/{len(board_rows)} 个板块，覆盖 {len(industry_map)} 只股票")
-
-            # 缓存
+        # 2. 磁盘缓存
+        disk_cache = _load_json_map(INDUSTRY_CACHE_FILE)
+        if disk_cache:
             cache_df = pd.DataFrame([
-                {"symbol": k, "industry": v} for k, v in industry_map.items()
+                {"symbol": k, "industry": v} for k, v in disk_cache.items()
             ])
             AkShareProvider._industry_cache = cache_df
             AkShareProvider._industry_cache_time = now
+            return disk_cache
 
+        # 3. 静态 fallback（最后手段）
+        static_map = self._load_static_fallback()
+
+        # 4. 尝试在线获取并合并到静态 fallback
+        try:
+            online_map = self._fetch_industry_map_online()
+            if online_map:
+                static_map.update(online_map)
+                _save_json_map(INDUSTRY_CACHE_FILE, static_map)
+                cache_df = pd.DataFrame([
+                    {"symbol": k, "industry": v} for k, v in static_map.items()
+                ])
+                AkShareProvider._industry_cache = cache_df
+                AkShareProvider._industry_cache_time = now
         except Exception as e:
-            print(f"[AkShare] 构建行业映射失败: {e}")
+            print(f"[AkShare] 在线行业映射获取失败，使用静态 fallback: {e}")
+
+        return static_map
+
+    def _fetch_industry_map_online(self) -> Dict[str, str]:
+        """尝试从多个在线源获取行业映射。"""
+        industry_map = {}
+
+        # 方法 A：东方财富行业板块
+        try:
+            boards_df = self._ak_stock_board_industry_name_em()
+            if "板块名称" in boards_df.columns and "板块代码" in boards_df.columns:
+                board_rows = boards_df[["板块名称", "板块代码"]].to_dict("records")
+                print(f"[AkShare] 发现 {len(board_rows)} 个行业板块")
+                success_count = 0
+                for idx, row in enumerate(board_rows):
+                    board_name = str(row["板块名称"]).strip()
+                    board_code = str(row["板块代码"]).strip()
+                    if not board_code.startswith("BK"):
+                        continue
+                    try:
+                        cons_df = self._ak_stock_board_industry_cons_em(symbol=board_code)
+                        if cons_df is None or cons_df.empty or "代码" not in cons_df.columns:
+                            continue
+                        for _, r in cons_df.iterrows():
+                            sym = str(r["代码"]).strip().zfill(6)
+                            if sym and sym not in industry_map:
+                                industry_map[sym] = board_name
+                        success_count += 1
+                        if (idx + 1) % 10 == 0:
+                            time.sleep(1)
+                    except Exception:
+                        continue
+                print(f"[AkShare] 东财板块映射：{success_count}/{len(board_rows)} 个板块，覆盖 {len(industry_map)} 只股票")
+        except Exception as e:
+            print(f"[AkShare] 东财板块映射失败: {e}")
 
         return industry_map
 
