@@ -10,11 +10,31 @@
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 
+import pandas as pd
 from sqlalchemy.orm import Session
 
 from backend.database.models import DailySnapshot
 from backend.data.price_service import PriceService
-from backend.data.tushare_client import get_tushare_token
+
+
+def _annualized_return(total_return_pct: float, days: int) -> Optional[float]:
+    """把总收益率换算成年化收益率。"""
+    if days <= 0:
+        return None
+    total = 1 + total_return_pct / 100
+    try:
+        return round((total ** (365 / days) - 1) * 100, 2)
+    except Exception:
+        return None
+
+
+def _compute_drawdown(prices: pd.Series) -> float:
+    """计算价格序列的最大回撤百分比。"""
+    if prices.empty:
+        return 0.0
+    cummax = prices.cummax()
+    drawdown = (prices - cummax) / cummax
+    return round(drawdown.min() * 100, 2)
 
 
 class SimpleBacktest:
@@ -47,12 +67,6 @@ class SimpleBacktest:
         if snapshot_date is None:
             return {"error": "数据库中没有任何快照，请先运行选股流程"}
 
-        if not get_tushare_token():
-            return {
-                "snapshot_date": snapshot_date,
-                "error": "TUSHARE_TOKEN 未配置。请在设置页面填写 Tushare Token，或通过环境变量 TUSHARE_TOKEN 注入。",
-            }
-
         # 默认买入日就是快照日
         if buy_date is None:
             buy_date = snapshot_date
@@ -78,6 +92,7 @@ class SimpleBacktest:
         returns = []
         valid_count = 0
         missing_symbols = []
+        all_price_dfs: Dict[str, pd.DataFrame] = {}
         for symbol in symbols:
             df = self.price_service.get_adj_close(
                 symbol,
@@ -100,6 +115,7 @@ class SimpleBacktest:
             ret = (sell_price - buy_price) / buy_price
             returns.append(ret)
             valid_count += 1
+            all_price_dfs[symbol] = df
 
         if valid_count == 0:
             return {
@@ -123,6 +139,35 @@ class SimpleBacktest:
             end_date=end_ymd,
         )
 
+        # 5. 组合净值序列（每日等权，简化再平衡）
+        portfolio_nav_df = None
+        max_drawdown = None
+        win_rate = None
+        holding_days = None
+        if all_price_dfs:
+            # 先统一每只股票的净值 = 当日收盘价 / 买入日收盘价
+            nav_frames = []
+            for symbol, df in all_price_dfs.items():
+                base = float(df["adj_close"].iloc[0])
+                if base <= 0:
+                    continue
+                nav = df[["trade_date", "adj_close"]].copy()
+                nav["nav"] = nav["adj_close"] / base
+                nav_frames.append(nav[["trade_date", "nav"]])
+
+            if nav_frames:
+                # 合并所有净值序列，按日期分组取均值
+                combined = pd.concat(nav_frames, ignore_index=True)
+                combined = combined.groupby("trade_date", as_index=False)["nav"].mean()
+                combined = combined.sort_values("trade_date").reset_index(drop=True)
+                combined["nav"] = combined["nav"].ffill()
+                portfolio_nav_df = combined
+                holding_days = len(combined)
+                max_drawdown = _compute_drawdown(combined["nav"])
+                win_rate = round(sum(1 for r in returns if r > 0) / len(returns) * 100, 2)
+
+        annualized = _annualized_return(portfolio_return, holding_days) if holding_days else None
+
         return {
             "snapshot_date": snapshot_date,
             "buy_date": buy_date,
@@ -131,8 +176,12 @@ class SimpleBacktest:
             "valid_stocks": valid_count,
             "missing_price_count": len(missing_symbols),
             "portfolio_return": portfolio_return,
+            "annualized_return": annualized,
             "benchmark_return": benchmark_return,
             "excess_return": round(portfolio_return - (benchmark_return or 0), 2) if benchmark_return is not None else None,
+            "max_drawdown": max_drawdown,
+            "win_rate": win_rate,
+            "holding_days": holding_days,
             "stocks": [
                 {"symbol": i.symbol, "name": i.name, "total_score": i.total_score}
                 for i in items

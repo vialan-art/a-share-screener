@@ -13,7 +13,7 @@
 设计：每次调用都 login → 查询 → logout，避免长连接被服务器踢。
 """
 from contextlib import contextmanager
-from typing import Optional, List
+from typing import Optional, List, Dict
 
 import pandas as pd
 
@@ -67,6 +67,7 @@ def fetch_hist_daily(
     start_date: str,
     end_date: str,
     adjust: str = "2",
+    bs=None,
 ) -> Optional[pd.DataFrame]:
     """拉单只股票后复权日线。
 
@@ -74,6 +75,7 @@ def fetch_hist_daily(
         symbol: 内部格式 000001 / 000001.SZ
         start_date / end_date: 支持 YYYY-MM-DD 或 YYYYMMDD
         adjust: "1" 前复权 / "2" 后复权 / "3" 不复权
+        bs: 外部传入的 baostock 会话对象；为 None 时自己 login/logout
 
     Returns:
         DataFrame 列：trade_date(YYYYMMDD), open, high, low, close,
@@ -84,28 +86,34 @@ def fetch_hist_daily(
     ed = _normalize_trade_date(end_date)
 
     fields = "date,open,high,low,close,volume,amount,adjustflag,preclose,isST"
+    own_session = bs is None
     try:
-        with _baostock_session() as bs:
-            rs = bs.query_history_k_data_plus(
-                bs_code,
-                fields,
-                start_date=sd,
-                end_date=ed,
-                frequency="d",
-                adjustflag=adjust,
-            )
-            if rs.error_code != "0":
-                print(f"[BaoStock] {symbol} error: {rs.error_code} {rs.error_msg}")
-                return None
-            rows = []
-            while rs.next():
-                rows.append(rs.get_row_data())
-            if not rows:
-                return None
-            df = pd.DataFrame(rows, columns=rs.fields)
+        if own_session:
+            import baostock as bs
+            bs.login()
+        rs = bs.query_history_k_data_plus(
+            bs_code,
+            fields,
+            start_date=sd,
+            end_date=ed,
+            frequency="d",
+            adjustflag=adjust,
+        )
+        if rs.error_code != "0":
+            print(f"[BaoStock] {symbol} error: {rs.error_code} {rs.error_msg}")
+            return None
+        rows = []
+        while rs.next():
+            rows.append(rs.get_row_data())
+        if not rows:
+            return None
+        df = pd.DataFrame(rows, columns=rs.fields)
     except Exception as e:
         print(f"[BaoStock] {symbol} fetch failed: {e}")
         return None
+    finally:
+        if own_session:
+            bs.logout()
 
     # 数据清洗
     df["trade_date"] = df["date"].apply(_trade_date_to_yyyymmdd)
@@ -117,6 +125,32 @@ def fetch_hist_daily(
     df["vol"] = df["volume"]
     return df[["trade_date", "open", "high", "low", "close",
              "adj_open", "adj_close", "vol", "isST"]]
+
+
+def fetch_hist_daily_batch(
+    symbols: List[str],
+    start_date: str,
+    end_date: str,
+    adjust: str = "2",
+) -> Dict[str, Optional[pd.DataFrame]]:
+    """批量拉多只股票历史日线，复用同一个 BaoStock session。
+
+    比单只循环 login/logout 快 5~10 倍，适合全市场预热。
+    """
+    import baostock as bs
+    lg = bs.login()
+    try:
+        result = {}
+        for symbol in symbols:
+            try:
+                df = fetch_hist_daily(symbol, start_date, end_date, adjust, bs=bs)
+                result[symbol] = df
+            except Exception as e:
+                print(f"[BaoStock] batch {symbol} failed: {e}")
+                result[symbol] = None
+        return result
+    finally:
+        bs.logout()
 
 
 def fetch_index_daily(

@@ -11,6 +11,7 @@ from datetime import datetime
 from backend.database.connection import SessionLocal
 from backend.pipeline import ScreenerPipeline
 from backend.config import get_provider_name, get_config
+from backend.data.price_service import PriceService
 
 
 def job():
@@ -23,6 +24,12 @@ def job():
         pipeline = ScreenerPipeline(provider_name=provider)
         result = pipeline.run(db, max_stocks=max_stocks)
         print(f"任务完成: {result}")
+
+        # 选股完成后，预拉 Top 20 + 沪深300 的历史价格到本地缓存
+        print(f"[{datetime.now().isoformat()}] 开始预热价格缓存...")
+        price_service = PriceService(db)
+        warm = price_service.warm_cache_for_snapshot(top_n=20, years=3)
+        print(f"价格缓存预热完成: {warm['warmed_count']} 个标的, 区间 {warm['start_date']} ~ {warm['end_date']}")
     except Exception as e:
         print(f"任务失败: {e}")
     finally:

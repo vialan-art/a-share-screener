@@ -11,7 +11,7 @@ from typing import List, Dict, Any, Optional
 import pandas as pd
 from sqlalchemy.orm import Session
 
-from backend.database.models import StockPrice
+from backend.database.models import StockPrice, DailySnapshot
 from backend.data import baostock_client
 from backend.data.tushare_client import (
     fetch_hist_daily as tushare_fetch_hist_daily,
@@ -189,3 +189,61 @@ class PriceService:
                 source=source,
             ))
         self.db.commit()
+
+    def warm_cache_for_snapshot(
+        self,
+        snapshot_date: Optional[str] = None,
+        top_n: int = 20,
+        years: int = 3,
+    ) -> Dict[str, Any]:
+        """为某快照的 Top N 股票和沪深300指数预拉历史价格到本地缓存。
+
+        每日选股后调用，可让后续回测直接读本地，无需再调外部接口。
+        """
+        if snapshot_date is None:
+            latest = (
+                self.db.query(DailySnapshot.snapshot_date)
+                .distinct()
+                .order_by(DailySnapshot.snapshot_date.desc())
+                .first()
+            )
+            snapshot_date = latest[0] if latest else None
+        if snapshot_date is None:
+            return {"error": "没有快照"}
+
+        items = (
+            self.db.query(DailySnapshot)
+            .filter(DailySnapshot.snapshot_date == snapshot_date)
+            .order_by(DailySnapshot.total_score.desc())
+            .limit(top_n)
+            .all()
+        )
+        symbols = [i.symbol for i in items]
+
+        end_date = datetime.now().strftime("%Y-%m-%d")
+        start_dt = datetime.strptime(snapshot_date, "%Y-%m-%d") - timedelta(days=365 * years)
+        start_date = start_dt.strftime("%Y-%m-%d")
+
+        warmed = []
+        for symbol in symbols:
+            try:
+                df = self.get_adj_close(symbol, start_date, end_date)
+                if df is not None and not df.empty:
+                    warmed.append(symbol)
+            except Exception as e:
+                print(f"[PriceService] warm {symbol} failed: {e}")
+
+        # 同时 warming 沪深300指数
+        try:
+            self.get_index_return("000300.SH", start_date, end_date)
+            warmed.append("000300.SH")
+        except Exception as e:
+            print(f"[PriceService] warm 000300.SH failed: {e}")
+
+        return {
+            "snapshot_date": snapshot_date,
+            "start_date": start_date,
+            "end_date": end_date,
+            "warmed_count": len(warmed),
+            "symbols": warmed,
+        }

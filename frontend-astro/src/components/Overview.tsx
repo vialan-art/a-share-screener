@@ -325,7 +325,12 @@ export default function Overview() {
                         {' · '}
                         超额: <span className={r.excess_return > 0 ? 'text-moss' : 'text-rust'}>{r.excess_return > 0 ? '+' : ''}{r.excess_return}%</span>
                       </p>
-                      <p className="text-[10px] text-ink-400 mt-2">有效股票 {r.valid_stocks}/{r.top_n}</p>
+                      <div className="flex items-center gap-3 mt-2 text-[10px] text-ink-400">
+                        <span>年化 {r.annualized_return > 0 ? '+' : ''}{r.annualized_return}%</span>
+                        <span>最大回撤 {r.max_drawdown}%</span>
+                        <span>胜率 {r.win_rate}%</span>
+                      </div>
+                      <p className="text-[10px] text-ink-400 mt-1">有效股票 {r.valid_stocks}/{r.top_n}</p>
                     </>
                   )}
                 </div>
