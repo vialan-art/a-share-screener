@@ -477,6 +477,11 @@ export default function Overview() {
                 <span>暂无数据</span>
               )}
             </div>
+            {qualityDetail?.estimation_note && (
+              <div className="mt-3 text-[11px] leading-relaxed text-ink-500 bg-ink-100/40 rounded-lg p-3">
+                {qualityDetail.estimation_note}
+              </div>
+            )}
           </motion.div>
 
           <motion.div variants={itemVariants} className="glass-card rounded-2xl p-6">

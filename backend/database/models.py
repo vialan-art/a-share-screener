@@ -71,6 +71,7 @@ class FinancialMetric(Base):
     data_source = Column(String(50), comment="数据来源，如 akshare/mock")
     data_freshness = Column(DateTime, comment="数据更新时间")
     completeness_score = Column(Float, comment="字段完整度 0-1")
+    data_source_note = Column(Text, comment="字段来源与估算说明")
 
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

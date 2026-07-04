@@ -81,6 +81,11 @@ function QualityBanner({ quality }: { quality: any }) {
               ))}
             </ul>
           )}
+          {quality.data_source_note && (
+            <p className="text-[10px] text-ink-500 mt-2 leading-relaxed">
+              {quality.data_source_note}
+            </p>
+          )}
           <p className="text-[10px] text-ink-400 mt-2">
             数据来自第三方接口，可能存在延迟或错误，仅供学习研究，不构成投资建议。
           </p>

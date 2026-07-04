@@ -101,6 +101,23 @@ class AkShareProvider(DataProvider):
     # 静态 fallback：常见股票行业映射
     _static_industry_map: Optional[Dict[str, str]] = None
 
+    # spot 行情短缓存 TTL（避免 get_daily_prices 与 get_financial_metrics 重复调用）
+    _spot_cache_ttl = timedelta(minutes=5)
+
+    def _get_cached_spot(self) -> pd.DataFrame:
+        """获取带短缓存的 spot 行情。"""
+        now = datetime.utcnow()
+        if (
+            getattr(self, "_spot_cache", None) is not None
+            and getattr(self, "_spot_cache_time", None) is not None
+            and now - self._spot_cache_time < self._spot_cache_ttl
+        ):
+            return self._spot_cache
+        df = self._ak_stock_zh_a_spot_em()
+        self._spot_cache = df
+        self._spot_cache_time = now
+        return df
+
     @property
     def name(self) -> str:
         return "akshare"
@@ -340,11 +357,15 @@ class AkShareProvider(DataProvider):
 
         return industry_map
 
+    # A 股非金融企业近似平均资产负债率（业绩快报不披露 debt 时的 fallback）
+    DEFAULT_DEBT_TO_ASSET = 45.0
+
     def get_financial_metrics(self, symbols: List[str]) -> List[Dict[str, Any]]:
         """获取财务指标。
 
-        使用 stock_yjbb_em（业绩快报）一次性获取全市场最新财报数据。
-        注意：业绩快报不是完整年报，部分指标缺失。
+        使用 stock_yjbb_em（业绩快报）一次性获取全市场最新财报数据，
+        并结合当日行情市值补全缺失的 debt / cashflow / total_equity 字段。
+        注意：业绩快报不是完整年报，部分指标为估算值，会在 data_source_note 中说明。
         """
         metrics = []
         now = datetime.utcnow()
@@ -388,6 +409,9 @@ class AkShareProvider(DataProvider):
         }
         df = df.rename(columns=column_map)
 
+        # 拿一次 spot 行情用于市值估算
+        spot_map = self._fetch_spot_for_estimation()
+
         for symbol in symbols:
             row = df[df["symbol"] == symbol]
             if row.empty:
@@ -400,12 +424,56 @@ class AkShareProvider(DataProvider):
             total_equity = self._to_float(r.get("total_equity"), scale=1e8)
             debt_to_asset = self._to_float(r.get("debt_to_asset"))
 
-            # 估算有息负债率（业绩快报通常不直接提供，用资产负债率估算）
-            interest_bearing_debt_ratio = debt_to_asset * 0.6 if debt_to_asset else None
+            notes: List[str] = []
 
-            # 经营现金流：业绩快报没有直接数据
-            ocf_per_share = self._to_float(r.get("ocf_per_share"))
-            operating_cash_flow = None  # 暂不估算，避免误导
+            spot = spot_map.get(symbol, {})
+            market_cap_yuan = spot.get("market_cap")  # 总市值（元）
+            latest_price = spot.get("latest_price")
+            bps = self._to_float(r.get("bps"))  # 每股净资产（元）
+            ocf_per_share = self._to_float(r.get("ocf_per_share"))  # 每股经营现金流（元）
+
+            # 估算总股本（亿股）
+            total_shares = None
+            if market_cap_yuan and latest_price and latest_price > 0:
+                total_shares = market_cap_yuan / latest_price / 1e8
+
+            # 1) 偿债能力：debt_to_asset 缺失时使用 A 股平均近似
+            if debt_to_asset is None:
+                debt_to_asset = self.DEFAULT_DEBT_TO_ASSET
+                notes.append("资产负债率使用 A 股市场默认值 45% 估算")
+            interest_bearing_debt_ratio = debt_to_asset * 0.6
+
+            # 2) total_equity：优先使用 yjbb 披露的净资产；否则用 每股净资产×总股本 估算
+            estimated_total_equity = False
+            if total_equity is None and total_shares is not None and bps is not None:
+                total_equity = round(total_shares * bps, 2)  # 亿元：元/股 × 亿股
+                estimated_total_equity = True
+                notes.append("净资产使用每股净资产×总市值估算")
+
+            # 3) total_assets：由资产负债率反推
+            if total_assets is None and total_equity is not None and debt_to_asset is not None and debt_to_asset < 100:
+                total_assets = total_equity / (1 - debt_to_asset / 100)
+                notes.append("总资产使用净资产/(1-资产负债率)估算")
+
+            # 4) 现金流：用 每股经营现金流量×总股本 估算
+            operating_cash_flow: Optional[float] = None
+            capital_expenditure: Optional[float] = None
+            free_cash_flow: Optional[float] = None
+            ocf_to_net_profit: Optional[float] = None
+            if ocf_per_share is not None and total_shares is not None:
+                operating_cash_flow = round(ocf_per_share * total_shares, 2)  # 亿元
+                # 资本支出取经营现金流的 25%，作为粗略近似（制造业常见区间）
+                capital_expenditure = round(-operating_cash_flow * 0.25, 2)
+                free_cash_flow = round(operating_cash_flow + capital_expenditure, 2)
+                if net_profit and net_profit != 0:
+                    ocf_to_net_profit = round(operating_cash_flow / net_profit, 2)
+                notes.append("现金流使用每股经营现金流×总市值估算，资本支出按 OCF 25% 近似")
+
+            # 5) ROA：业绩快报不披露，用净利润/总资产 估算
+            roa = self._to_float(r.get("roa"))
+            if roa is None and net_profit is not None and total_assets is not None and total_assets > 0:
+                roa = round(net_profit / total_assets * 100, 2)
+                notes.append("ROA 使用净利润/总资产估算")
 
             # 净利率 = 净利润 / 营业收入
             net_margin = None
@@ -416,7 +484,7 @@ class AkShareProvider(DataProvider):
                 "symbol": symbol,
                 "report_period": str(r.get("report_period", "")),
                 "roe": self._to_float(r.get("roe")),
-                "roa": self._to_float(r.get("roa")),
+                "roa": roa,
                 "gross_margin": self._to_float(r.get("gross_margin")),
                 "net_margin": net_margin,
                 "revenue": revenue,
@@ -433,21 +501,45 @@ class AkShareProvider(DataProvider):
                 "total_equity": total_equity,
                 "operating_cash_flow": operating_cash_flow,
                 "operating_cash_flow_growth": None,
-                "capital_expenditure": None,
-                "free_cash_flow": None,
-                "ocf_to_net_profit": None,
+                "capital_expenditure": capital_expenditure,
+                "free_cash_flow": free_cash_flow,
+                "ocf_to_net_profit": ocf_to_net_profit,
                 "audit_opinion": "标准无保留意见",  # 业绩快报默认无审计意见字段
                 "data_source": self.name,
                 "data_freshness": now,
                 "completeness_score": 0.0,  # 由 quality engine 计算
+                "data_source_note": "; ".join(notes) if notes else "业绩快报原始字段完整",
             })
 
         return metrics
 
+    def _fetch_spot_for_estimation(self) -> Dict[str, Dict[str, Any]]:
+        """获取 spot 行情，仅用于财务估算（总市值、最新价）。失败返回空 dict。"""
+        try:
+            df = self._get_cached_spot()
+            df = df.rename(columns={
+                "代码": "symbol",
+                "最新价": "latest_price",
+                "总市值": "market_cap",
+            })
+            df["latest_price"] = pd.to_numeric(df["latest_price"], errors="coerce")
+            df["market_cap"] = pd.to_numeric(df["market_cap"], errors="coerce")
+            result = {}
+            for _, r in df.iterrows():
+                sym = str(r["symbol"]).strip().zfill(6)
+                result[sym] = {
+                    "latest_price": r["latest_price"],
+                    "market_cap": r["market_cap"],
+                }
+            return result
+        except Exception as e:
+            print(f"[AkShareProvider] spot 行情获取失败，财务估算将受限: {e}")
+            return {}
+
     def get_daily_prices(self, symbols: List[str]) -> List[Dict[str, Any]]:
         """获取日线行情（用于计算动量和估值）。"""
         now = datetime.utcnow()
-        df = self._ak_stock_zh_a_spot_em()
+        df = self._get_cached_spot()
 
         # 标准化列名
         df = df.rename(columns={

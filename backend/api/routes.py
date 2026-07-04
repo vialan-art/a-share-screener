@@ -262,6 +262,7 @@ def get_stock_detail(symbol: str, db: Session = Depends(get_db)):
             "source": m("data_source") or "unknown",
             "freshness": m("data_freshness").isoformat() if m("data_freshness") else None,
             "completeness_score": m("completeness_score"),
+            "data_source_note": m("data_source_note") or "",
             "issues": [],
         },
         "score": {
@@ -360,6 +361,11 @@ def get_quality_detail(db: Session = Depends(get_db)):
         "with_debt": ratio(FinancialMetric.debt_to_asset != None),
         "with_cashflow": ratio(FinancialMetric.operating_cash_flow != None),
         "field_coverage": field_coverage,
+        "estimation_note": (
+            "debt_to_asset 缺省时使用 A 股市场默认值 45% 估算；"
+            "cashflow / total_equity / total_assets 基于当日总市值与每股指标估算；"
+            "ROA 使用净利润/总资产估算。"
+        ),
         "recent_logs": [
             {
                 "time": log.update_time.isoformat(),
