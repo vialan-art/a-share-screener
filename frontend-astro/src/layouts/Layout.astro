@@ -1,0 +1,94 @@
+---
+import { ViewTransitions } from 'astro:transitions';
+
+export interface Props {
+  title?: string;
+  description?: string;
+  active?: string;
+}
+
+const { title = 'Pizarro · 选股', description = 'A rigorous, artist-portfolio style stock screener.', active = '' } = Astro.props;
+
+const navItems = [
+  { href: '/', label: '概览', labelEn: 'Overview' },
+  { href: '/screener/', label: '选股池', labelEn: 'Screener' },
+  { href: '/history/', label: '历史', labelEn: 'History' },
+  { href: '/logs/', label: '日志', labelEn: 'Logs' },
+  { href: '/advisor/', label: 'Advisor', labelEn: 'AI' },
+  { href: '/settings/', label: '设置', labelEn: 'Settings' },
+];
+
+function isActive(href: string, current: string) {
+  if (href === '/') return current === '/';
+  return current.startsWith(href.replace(/\/$/, ''));
+}
+---
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content={description} />
+    <title>{title}</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <ViewTransitions />
+  </head>
+  <body class="min-h-screen flex">
+    <aside class="w-72 bg-white/40 backdrop-blur-2xl border-r border-white/50 flex flex-col fixed h-full z-20">
+      <div class="p-8 pb-6 relative z-10">
+        <a href="/" class="block group">
+          <h1 class="font-display text-3xl font-medium text-sumi tracking-wide group-hover:opacity-80 transition-opacity duration-500">
+            Pizarro
+          </h1>
+          <p class="text-[10px] tracking-[0.25em] text-ink-500 uppercase mt-1">
+            A-Share Screener
+          </p>
+        </a>
+      </div>
+
+      <nav class="flex-1 px-4 space-y-1 relative z-10">
+        {navItems.map((item) => {
+          const itemActive = isActive(item.href, active);
+          const activeClass = itemActive
+            ? 'bg-sumi text-ink-50 shadow-soft'
+            : 'text-ink-500 hover:bg-white/40 hover:text-sumi';
+          return (
+            <a
+              href={item.href}
+              class={`group relative flex items-center justify-between px-5 py-4 rounded-xl transition-all duration-500 overflow-hidden ${activeClass}`}
+            >
+              <span class={`absolute inset-0 rounded-xl transition-opacity duration-500 ${itemActive ? 'opacity-0' : 'opacity-0 group-hover:opacity-100'}`}
+                style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.6) 0%, rgba(255,255,255,0.1) 100%)' }}
+              />
+              <span class="relative z-10 text-sm font-medium tracking-wide">{item.label}</span>
+              <span class={`relative z-10 text-[10px] tracking-widest uppercase ${itemActive ? 'text-ink-300' : 'text-ink-400'}`}
+              >
+                {item.labelEn}
+              </span>
+              {itemActive && (
+                <span class="absolute right-3 w-1.5 h-1.5 rounded-full bg-moss" />
+              )}
+            </a>
+          );
+        })}
+      </nav>
+
+      <div class="p-6 border-t border-white/40 relative z-10">
+        <div class="marble-card rounded-xl p-4">
+          <p class="text-[10px] tracking-widest text-ink-500 uppercase mb-2">今日箴言</p>
+          <p class="text-xs text-ink-700 leading-relaxed font-serif">
+            "投资最重要的是不要亏钱，第二重要的是记住第一条。"
+          </p>
+          <p class="text-[10px] text-ink-400 mt-2 text-right">— Warren Buffett</p>
+        </div>
+      </div>
+    </aside>
+
+    <main class="flex-1 ml-72 min-h-screen">
+      <div class="p-8 lg:p-12 max-w-7xl mx-auto animate-fade-in">
+        <slot />
+      </div>
+    </main>
+  </body>
+</html>

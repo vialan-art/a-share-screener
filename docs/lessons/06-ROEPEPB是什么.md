@@ -1,3 +1,9 @@
+---
+title: 06-ROEPEPB是什么
+type: note
+permalink: a-share-screener/docs/lessons/06-roepepb-是什么
+---
+
 # 第 6 课：ROE、PE、PB 是什么？
 
 ## ROE：净资产收益率

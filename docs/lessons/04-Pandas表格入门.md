@@ -1,3 +1,9 @@
+---
+title: 04-Pandas表格入门
+type: note
+permalink: a-share-screener/docs/lessons/04-pandas-表格入门
+---
+
 # 第 4 课：Pandas 表格入门
 
 ## Pandas 是什么？

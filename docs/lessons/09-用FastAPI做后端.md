@@ -1,3 +1,9 @@
+---
+title: 09-用FastAPI做后端
+type: note
+permalink: a-share-screener/docs/lessons/09-用-fast-api-做后端
+---
+
 # 第 9 课：用 FastAPI 做后端
 
 ## 什么是后端？

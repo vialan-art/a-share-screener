@@ -1,3 +1,9 @@
+---
+title: 01-为什么用Python
+type: note
+permalink: a-share-screener/docs/lessons/01-为什么用-python
+---
+
 # 第 1 课：为什么用 Python 做这个项目？
 
 ## 一句话总结

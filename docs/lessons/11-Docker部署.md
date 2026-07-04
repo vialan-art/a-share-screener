@@ -1,3 +1,9 @@
+---
+title: 11-Docker部署
+type: note
+permalink: a-share-screener/docs/lessons/11-docker-部署
+---
+
 # 第 11 课：Docker 部署
 
 ## 什么是 Docker？

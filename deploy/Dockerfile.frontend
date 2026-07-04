@@ -3,10 +3,10 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-COPY frontend/package*.json ./
+COPY frontend-astro/package*.json ./
 RUN npm install
 
-COPY frontend/ ./
+COPY frontend-astro/ ./
 RUN npm run build
 
 FROM nginx:alpine

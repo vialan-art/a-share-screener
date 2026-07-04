@@ -1,3 +1,9 @@
+---
+title: 05-从AkShare拿数据
+type: note
+permalink: a-share-screener/docs/lessons/05-从-ak-share-拿数据
+---
+
 # 第 5 课：从 AkShare 拿数据
 
 ## AkShare 是什么？

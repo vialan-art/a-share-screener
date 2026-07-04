@@ -1,3 +1,9 @@
+---
+title: 07-Z-score标准化
+type: note
+permalink: a-share-screener/docs/lessons/07-z-score-标准化
+---
+
 # 第 7 课：Z-score 标准化
 
 ## 为什么要标准化？
