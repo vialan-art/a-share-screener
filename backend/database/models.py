@@ -87,6 +87,7 @@ class StockScore(Base):
     quality_score = Column(Float, comment="质量分")
     value_score = Column(Float, comment="估值分")
     momentum_score = Column(Float, comment="动量分")
+    stability_score = Column(Float, comment="增长稳定分")
     total_score = Column(Float, comment="综合得分")
 
     passed_filters = Column(Boolean, comment="是否通过及格线")
@@ -106,6 +107,7 @@ class DailySnapshot(Base):
     quality_score = Column(Float)
     value_score = Column(Float)
     momentum_score = Column(Float)
+    stability_score = Column(Float)
     pe_ttm = Column(Float)
     pb = Column(Float)
     roe = Column(Float)
@@ -156,3 +158,31 @@ class AppConfig(Base):
     value = Column(Text, comment="配置值（JSON 字符串）")
     description = Column(String(255), comment="配置说明")
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class Portfolio(Base):
+    """实盘推荐组合快照。"""
+    __tablename__ = "portfolios"
+
+    id = Column(Integer, primary_key=True, index=True)
+    portfolio_date = Column(String(20), index=True, comment="组合日期 YYYY-MM-DD")
+    symbol = Column(String(20), index=True, comment="股票代码")
+    name = Column(String(100))
+    industry = Column(String(100))
+    total_score = Column(Float)
+    weight = Column(Float, comment="等权权重")
+    data_json = Column(Text, comment="该日完整数据 JSON")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class PortfolioNav(Base):
+    """实盘组合每日净值。"""
+    __tablename__ = "portfolio_navs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    nav_date = Column(String(20), index=True, comment="净值日期 YYYY-MM-DD")
+    portfolio_return = Column(Float, comment="组合累计收益（从组合成立起）")
+    benchmark_return = Column(Float, comment="沪深300累计收益（从组合成立起）")
+    daily_return = Column(Float, comment="当日收益")
+    benchmark_daily_return = Column(Float, comment="沪深300当日收益")
+    created_at = Column(DateTime, default=datetime.utcnow)

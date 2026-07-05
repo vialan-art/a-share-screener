@@ -22,6 +22,23 @@ function getScoreColor(score: number) {
   return 'text-ink-500'
 }
 
+function ReasonPill({ reasons }: { reasons?: string[] }) {
+  if (!reasons || reasons.length === 0) return null
+  return (
+    <div className="flex flex-wrap gap-1">
+      {reasons.map((r, idx) => (
+        <span
+          key={idx}
+          className="text-[10px] px-2 py-0.5 rounded-full bg-moss/10 text-moss whitespace-nowrap"
+          title={r}
+        >
+          {r.length > 10 ? `${r.slice(0, 10)}...` : r}
+        </span>
+      ))}
+    </div>
+  )
+}
+
 export default function Screener() {
   const [items, setItems] = useState<any[]>([])
   const [date, setDate] = useState('')
@@ -110,6 +127,7 @@ export default function Screener() {
             <option value="total_score">综合得分</option>
             <option value="quality_score">质量分</option>
             <option value="value_score">估值分</option>
+            <option value="stability_score">稳定分</option>
             <option value="momentum_score">动量分</option>
             <option value="pe_ttm">PE 升序</option>
             <option value="pb">PB 升序</option>
@@ -138,10 +156,12 @@ export default function Screener() {
                 <th className="px-6 py-4 text-right font-sans">综合</th>
                 <th className="px-6 py-4 text-right font-sans">质量</th>
                 <th className="px-6 py-4 text-right font-sans">估值</th>
+                <th className="px-6 py-4 text-right font-sans">稳定</th>
                 <th className="px-6 py-4 text-right font-sans">动量</th>
                 <th className="px-6 py-4 text-right font-sans">PE</th>
                 <th className="px-6 py-4 text-right font-sans">PB</th>
                 <th className="px-6 py-4 text-right font-sans">ROE</th>
+                <th className="px-6 py-4 font-sans">入选理由</th>
               </tr>
             </thead>
             <tbody>
@@ -176,6 +196,9 @@ export default function Screener() {
                     {item.value_score.toFixed(2)}
                   </td>
                   <td className="px-6 py-4 text-right font-mono text-sm text-ink-600">
+                    {item.stability_score?.toFixed(2) || '-'}
+                  </td>
+                  <td className="px-6 py-4 text-right font-mono text-sm text-ink-600">
                     {item.momentum_score.toFixed(2)}
                   </td>
                   <td className="px-6 py-4 text-right font-mono text-sm text-ink-600">
@@ -186,6 +209,9 @@ export default function Screener() {
                   </td>
                   <td className="px-6 py-4 text-right font-mono text-sm text-ink-600">
                     {item.roe?.toFixed(2) || '-'}%
+                  </td>
+                  <td className="px-6 py-4">
+                    <ReasonPill reasons={item._reasons} />
                   </td>
                 </tr>
               ))}

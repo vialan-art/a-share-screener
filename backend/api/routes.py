@@ -1,4 +1,6 @@
 """FastAPI 路由。"""
+import ast
+import json
 from typing import List, Optional
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException
@@ -8,12 +10,43 @@ import threading
 import uuid
 
 from backend.database.connection import get_db, SessionLocal
-from backend.database.models import Stock, FinancialMetric, StockScore, DailySnapshot, UpdateLog, AppConfig
+from backend.database.models import Stock, FinancialMetric, StockScore, DailySnapshot, UpdateLog, AppConfig, Portfolio, PortfolioNav
 from backend.advisor.service import AIAdvisor
 from backend.pipeline import ScreenerPipeline
 from backend.core.config import Settings, get_settings
 
 router = APIRouter()
+
+
+def _extract_reasons(data_json: Optional[str]) -> List[str]:
+    """从快照 data_json 中提取入选理由。"""
+    if not data_json:
+        return []
+    try:
+        data = json.loads(data_json)
+        details = data.get("_score_details", {})
+        reasons = []
+        quality = details.get("quality", {})
+        value = details.get("value", {})
+        stability = details.get("stability", {})
+        if quality.get("roe_score", 0) >= 0.7:
+            reasons.append("ROE优秀")
+        if quality.get("growth_score", 0) >= 0.7:
+            reasons.append("增长强劲")
+        if quality.get("ocf_ratio_score", 0) >= 0.7:
+            reasons.append("现金流健康")
+        if value.get("pe_score", 0) >= 0.7:
+            reasons.append("PE低估")
+        if value.get("pb_score", 0) >= 0.7:
+            reasons.append("PB低估")
+        if stability.get("ocf_strong"):
+            reasons.append("盈利质量稳")
+        if stability.get("revenue_growing") and stability.get("profit_growing"):
+            reasons.append("增长一致")
+        return reasons[:3]
+    except Exception:
+        return []
+
 
 # ponytail: in-memory job store for single uvicorn worker. Switch to Redis if scaled.
 _jobs: dict = {}
@@ -164,12 +197,14 @@ def get_latest_snapshot(
                 "total_score": i.total_score,
                 "quality_score": i.quality_score,
                 "value_score": i.value_score,
+                "stability_score": i.stability_score,
                 "momentum_score": i.momentum_score,
                 "pe_ttm": i.pe_ttm,
                 "pb": i.pb,
                 "roe": i.roe,
                 "debt_to_asset": i.debt_to_asset,
                 "dividend_yield": i.dividend_yield,
+                "_reasons": _extract_reasons(i.data_json),
             }
             for i in items
         ],
@@ -197,12 +232,14 @@ def get_snapshot_by_date(date: str, db: Session = Depends(get_db)):
                 "total_score": i.total_score,
                 "quality_score": i.quality_score,
                 "value_score": i.value_score,
+                "stability_score": i.stability_score,
                 "momentum_score": i.momentum_score,
                 "pe_ttm": i.pe_ttm,
                 "pb": i.pb,
                 "roe": i.roe,
                 "debt_to_asset": i.debt_to_asset,
                 "dividend_yield": i.dividend_yield,
+                "_reasons": _extract_reasons(i.data_json),
             }
             for i in items
         ],
@@ -269,6 +306,7 @@ def get_stock_detail(symbol: str, db: Session = Depends(get_db)):
             "total": latest_score.total_score if latest_score else None,
             "quality": latest_score.quality_score if latest_score else None,
             "value": latest_score.value_score if latest_score else None,
+            "stability": latest_score.stability_score if latest_score else None,
             "momentum": latest_score.momentum_score if latest_score else None,
             "passed_filters": latest_score.passed_filters if latest_score else None,
             "filter_reasons": latest_score.filter_reasons if latest_score else None,
@@ -400,6 +438,69 @@ def run_simple_backtest(
             top_n=top_n,
         )
     return {"results": engine.run_multiple_horizons(top_n=top_n)}
+
+
+@router.get("/backtest/rolling")
+def run_rolling_backtest(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    top_n: int = 20,
+    db: Session = Depends(get_db),
+):
+    """滚动回测：每月第一个交易日调仓，等权持有 Top N，对比沪深300和随机选股。"""
+    from backend.backtest.rolling import RollingBacktest
+
+    engine = RollingBacktest(db)
+    return engine.run(start_date=start_date, end_date=end_date, top_n=top_n)
+
+
+@router.get("/portfolio/latest")
+def get_latest_portfolio(top_n: int = 20, db: Session = Depends(get_db)):
+    """获取最新实盘推荐组合。"""
+    latest = db.query(Portfolio).order_by(Portfolio.portfolio_date.desc()).first()
+    if not latest:
+        return {"date": None, "items": []}
+    items = (
+        db.query(Portfolio)
+        .filter(Portfolio.portfolio_date == latest.portfolio_date)
+        .order_by(Portfolio.total_score.desc())
+        .limit(top_n)
+        .all()
+    )
+    return {
+        "date": latest.portfolio_date,
+        "items": [
+            {
+                "symbol": i.symbol,
+                "name": i.name,
+                "industry": i.industry,
+                "total_score": i.total_score,
+                "weight": i.weight,
+            }
+            for i in items
+        ],
+    }
+
+
+@router.get("/portfolio/nav")
+def get_portfolio_nav(limit: int = 252, db: Session = Depends(get_db)):
+    """获取实盘组合历史净值。"""
+    rows = (
+        db.query(PortfolioNav)
+        .order_by(PortfolioNav.nav_date.asc())
+        .limit(limit)
+        .all()
+    )
+    return [
+        {
+            "date": r.nav_date,
+            "portfolio_return": r.portfolio_return,
+            "benchmark_return": r.benchmark_return,
+            "daily_return": r.daily_return,
+            "benchmark_daily_return": r.benchmark_daily_return,
+        }
+        for r in rows
+    ]
 
 
 @router.get("/quality/summary")

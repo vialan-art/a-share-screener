@@ -7,12 +7,13 @@
 4. 支持全市场 5000+ 只股票
 """
 from datetime import datetime
+import json
 from typing import List, Dict, Any
 from sqlalchemy.orm import Session
 
 from backend.data.factory import get_provider
 from backend.database.models import (
-    Stock, FinancialMetric, StockScore, DailySnapshot, UpdateLog,
+    Stock, FinancialMetric, StockScore, DailySnapshot, UpdateLog, Portfolio,
 )
 from backend.filters.engine import FilterEngine
 from backend.scoring.engine import ScoringEngine
@@ -183,6 +184,7 @@ class ScreenerPipeline:
                     quality_score=sr.quality_score,
                     value_score=sr.value_score,
                     momentum_score=sr.momentum_score,
+                    stability_score=sr.stability_score,
                     total_score=sr.total_score,
                     passed_filters=True,
                     filter_reasons="[]",
@@ -196,6 +198,7 @@ class ScreenerPipeline:
                         quality_score=0.0,
                         value_score=0.0,
                         momentum_score=0.0,
+                        stability_score=0.0,
                         total_score=0.0,
                         passed_filters=False,
                         filter_reasons=str(r.reasons),
@@ -213,6 +216,11 @@ class ScreenerPipeline:
             for sr in score_results:
                 stock = next((s for s in stocks if s["symbol"] == sr.symbol), {})
                 metrics = metrics_map.get(sr.symbol, {})
+                enriched_metrics = dict(metrics)
+                # 移除不可 JSON 序列化的对象
+                enriched_metrics.pop("data_freshness", None)
+                enriched_metrics["_score_details"] = sr.details
+                enriched_metrics["_filter_reasons"] = []
                 db.add(DailySnapshot(
                     snapshot_date=snapshot_date,
                     symbol=sr.symbol,
@@ -222,15 +230,23 @@ class ScreenerPipeline:
                     quality_score=sr.quality_score,
                     value_score=sr.value_score,
                     momentum_score=sr.momentum_score,
+                    stability_score=sr.stability_score,
                     pe_ttm=metrics.get("pe_ttm"),
                     pb=metrics.get("pb"),
                     roe=metrics.get("roe"),
                     debt_to_asset=metrics.get("debt_to_asset"),
                     dividend_yield=metrics.get("dividend_yield"),
-                    data_json=str(metrics),
+                    data_json=json.dumps(enriched_metrics, ensure_ascii=False, default=str),
                 ))
             db.commit()
             stats["stage_times"]["snapshot"] = (datetime.utcnow() - stage_start).total_seconds()
+
+            # 8. 保存实盘推荐组合
+            stage_start = datetime.utcnow()
+            _progress("[实盘] 保存推荐组合...")
+            print("[实盘] 保存推荐组合...")
+            self._save_portfolio(db, snapshot_date, score_results, stocks)
+            stats["stage_times"]["portfolio"] = (datetime.utcnow() - stage_start).total_seconds()
 
             total_time = (datetime.utcnow() - start_time).total_seconds()
             stats["stage_times"]["total"] = total_time
@@ -266,3 +282,27 @@ class ScreenerPipeline:
             log.message = str(e)
             db.commit()
             raise
+
+    def _save_portfolio(self, db: Session, snapshot_date: str, score_results, stocks: List[Dict[str, Any]], top_n: int = 20):
+        """保存当日 Top N 推荐组合为实盘跟踪组合。"""
+        # 只保留前 top_n
+        top = score_results[:top_n]
+        if not top:
+            return
+
+        db.query(Portfolio).filter(Portfolio.portfolio_date == snapshot_date).delete()
+        db.commit()
+
+        weight = round(1.0 / len(top), 6)
+        for sr in top:
+            stock = next((s for s in stocks if s["symbol"] == sr.symbol), {})
+            db.add(Portfolio(
+                portfolio_date=snapshot_date,
+                symbol=sr.symbol,
+                name=stock.get("name", ""),
+                industry=stock.get("industry", ""),
+                total_score=sr.total_score,
+                weight=weight,
+                data_json=str({"score_details": sr.details}),
+            ))
+        db.commit()

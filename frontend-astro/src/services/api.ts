@@ -48,6 +48,25 @@ export async function fetchBacktest() {
   return res.json()
 }
 
+export async function fetchRollingBacktest(params?: { start_date?: string; end_date?: string; top_n?: number }) {
+  const qs = new URLSearchParams()
+  if (params?.start_date) qs.append('start_date', params.start_date)
+  if (params?.end_date) qs.append('end_date', params.end_date)
+  if (params?.top_n !== undefined) qs.append('top_n', String(params.top_n))
+  const res = await fetch(`${API_BASE}/backtest/rolling?${qs}`)
+  return res.json()
+}
+
+export async function fetchPortfolio() {
+  const res = await fetch(`${API_BASE}/portfolio/latest`)
+  return res.json()
+}
+
+export async function fetchPortfolioNav() {
+  const res = await fetch(`${API_BASE}/portfolio/nav`)
+  return res.json()
+}
+
 export async function fetchQualityDetail() {
   const res = await fetch(`${API_BASE}/quality/detail`)
   return res.json()
