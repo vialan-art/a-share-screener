@@ -303,6 +303,6 @@ class ScreenerPipeline:
                 industry=stock.get("industry", ""),
                 total_score=sr.total_score,
                 weight=weight,
-                data_json=str({"score_details": sr.details}),
+                data_json=json.dumps({"score_details": sr.details}, ensure_ascii=False),
             ))
         db.commit()
