@@ -110,7 +110,7 @@ class AkShareProvider:
     _spot_source: str = "em"
 
     def _get_cached_spot(self) -> pd.DataFrame:
-        """获取带短缓存的 spot 行情。EM 失败时回退到新浪 spot。"""
+        """获取带短缓存的 spot 行情。EM 失败时回退到新浪 spot，整体受超时保护。"""
         now = datetime.utcnow()
         if (
             getattr(self, "_spot_cache", None) is not None
@@ -118,16 +118,37 @@ class AkShareProvider:
             and now - self._spot_cache_time < self._spot_cache_ttl
         ):
             return self._spot_cache
+
+        import concurrent.futures
+
+        def _fetch():
+            try:
+                df = self._ak_stock_zh_a_spot_em()
+                self._spot_source = "em"
+                return df
+            except Exception as e:
+                print(f"[AkShareProvider] EM spot 失败，回退新浪 spot: {type(e).__name__}: {str(e)[:80]}")
+                df = self._ak_stock_zh_a_spot_sina()
+                self._spot_source = "sina"
+                return df
+
         try:
-            df = self._ak_stock_zh_a_spot_em()
-            self._spot_source = "em"
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(_fetch)
+                df = future.result(timeout=self.SPOT_TIMEOUT_SECONDS)
+            self._spot_cache = df
+            self._spot_cache_time = now
+            return df
+        except concurrent.futures.TimeoutError:
+            print(f"[AkShareProvider] spot 行情整体超时 {self.SPOT_TIMEOUT_SECONDS}s，返回空行情")
+            self._spot_cache = pd.DataFrame()
+            self._spot_cache_time = now
+            return self._spot_cache
         except Exception as e:
-            print(f"[AkShareProvider] EM spot 失败，回退新浪 spot: {type(e).__name__}: {str(e)[:80]}")
-            df = self._ak_stock_zh_a_spot_sina()
-            self._spot_source = "sina"
-        self._spot_cache = df
-        self._spot_cache_time = now
-        return df
+            print(f"[AkShareProvider] spot 行情获取失败: {type(e).__name__}: {str(e)[:80]}")
+            self._spot_cache = pd.DataFrame()
+            self._spot_cache_time = now
+            return self._spot_cache
 
     @property
     def name(self) -> str:
