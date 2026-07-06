@@ -218,11 +218,18 @@ class AkShareProvider:
         import akshare as ak
         return ak.stock_industry_change_cninfo(symbol=symbol)
 
+    # 是否启用新浪财报真实资产负债表 fallback（网络差时关闭可大幅提升速度）
+    ENABLE_SINA_BALANCE_SHEET = os.environ.get("AKSHARE_ENABLE_SINA_BALANCE_SHEET", "false").lower() in ("1", "true", "yes")
+
     def _fetch_balance_sheet_sina(self, symbol: str) -> Dict[str, Any]:
         """从新浪财报获取真实资产负债率与总资产。
 
+        默认不启用（ENABLE_SINA_BALANCE_SHEET=false），仅当环境变量开启时执行，
+        避免网络差时逐只请求新浪导致整体 pipeline 阻塞。
         失败或数据缺失时返回空 dict，调用方继续使用估算值。
         """
+        if not self.ENABLE_SINA_BALANCE_SHEET:
+            return {}
         try:
             df = self._ak_stock_financial_report_sina(symbol, "资产负债表")
             if df is None or df.empty:
