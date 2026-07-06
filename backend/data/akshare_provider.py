@@ -462,6 +462,9 @@ class AkShareProvider:
     # A 股非金融企业近似平均资产负债率（业绩快报不披露 debt 时的 fallback）
     DEFAULT_DEBT_TO_ASSET = 45.0
 
+    # 是否启用新浪日线换手率 fallback（按需关闭可大幅提升 get_financial_metrics 速度）
+    ENABLE_SINA_TURNOVER_FALLBACK = os.environ.get("AKSHARE_ENABLE_SINA_TURNOVER_FALLBACK", "false").lower() in ("1", "true", "yes")
+
     def get_financial_metrics(self, symbols: List[str]) -> List[Dict[str, Any]]:
         """获取财务指标。
 
@@ -623,9 +626,9 @@ class AkShareProvider:
             # 行业：优先使用业绩快报的所处行业
             industry = str(r.get("industry", "")).strip()
 
-            # 换手率：spot 缺失时用新浪日线 20 日均值
+            # 换手率：spot 缺失时按配置决定是否用新浪日线 20 日均值
             turnover = spot.get("turnover")
-            if turnover is None:
+            if turnover is None and self.ENABLE_SINA_TURNOVER_FALLBACK:
                 turnover = self._fetch_avg_turnover_sina(symbol, days=20)
                 if turnover is not None:
                     notes.append("换手率由新浪日线 20 日均值计算")
