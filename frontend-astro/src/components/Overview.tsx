@@ -7,7 +7,7 @@ import {
   fetchQualityDetail,
   runPipeline,
   fetchRunStatus,
-  fetchBacktest,
+  fetchRollingBacktest,
   getWatchlistDownloadUrl,
 } from '../services/api'
 import {
@@ -128,7 +128,7 @@ export default function Overview() {
       fetchLogs(),
       fetchQualitySummary(),
       fetchQualityDetail(),
-      fetchBacktest(),
+      fetchRollingBacktest({ top_n: 20, frequency: 'daily' }),
     ])
     setSnapshot(snap)
     setLogs(logList)
@@ -199,7 +199,7 @@ export default function Overview() {
       .slice(0, 8)
   }, [snapshot, meta])
 
-  const backtestResults = backtest?.results || []
+  const backtestResult = backtest || null
 
   return (
     <motion.div
@@ -295,51 +295,58 @@ export default function Overview() {
         </div>
       </motion.div>
 
-      {/* Backtest Preview */}
-      {backtestResults.length > 0 && (
+      {/* Rolling Backtest Preview */}
+      {backtestResult && !backtestResult.error && (
         <motion.div variants={itemVariants} className="glass-card rounded-2xl p-6">
           <div className="flex items-center gap-3 mb-6">
             <History size={18} className="text-moss" />
             <div>
               <p className="text-[10px] tracking-[0.2em] text-ink-500 uppercase">Strategy Backtest</p>
-              <h3 className="font-display text-xl text-sumi mt-1">策略历史表现（等权重 Top 20）</h3>
+              <h3 className="font-display text-xl text-sumi mt-1">策略近期表现（滚动调仓 Top 20）</h3>
             </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {backtestResults.map((r: any) => {
-              const hasError = r.error || r.portfolio_return === null
-              const portfolioColor = r.portfolio_return > 0 ? 'text-moss' : r.portfolio_return < 0 ? 'text-rust' : 'text-ink-500'
-              const benchmarkColor = r.benchmark_return > 0 ? 'text-moss' : r.benchmark_return < 0 ? 'text-rust' : 'text-ink-500'
-              return (
-                <div key={r.label} className="p-4 rounded-xl border border-ink-200/40 bg-washi/30">
-                  <p className="text-xs text-ink-500 mb-2">{r.label} 买入持有至今</p>
-                  {hasError ? (
-                    <p className="text-xs text-amber-600">{r.error || '缺少历史价格数据'}</p>
-                  ) : (
-                    <>
-                      <p className={`font-serif text-2xl ${portfolioColor}`}>
-                        {r.portfolio_return > 0 ? '+' : ''}{r.portfolio_return}%
-                      </p>
-                      <p className="text-xs text-ink-500 mt-1">
-                        沪深300: <span className={benchmarkColor}>{r.benchmark_return > 0 ? '+' : ''}{r.benchmark_return}%</span>
-                        {' · '}
-                        超额: <span className={r.excess_return > 0 ? 'text-moss' : 'text-rust'}>{r.excess_return > 0 ? '+' : ''}{r.excess_return}%</span>
-                      </p>
-                      <div className="flex items-center gap-3 mt-2 text-[10px] text-ink-400">
-                        <span>年化 {r.annualized_return > 0 ? '+' : ''}{r.annualized_return}%</span>
-                        <span>最大回撤 {r.max_drawdown}%</span>
-                        <span>胜率 {r.win_rate}%</span>
-                      </div>
-                      <p className="text-[10px] text-ink-400 mt-1">有效股票 {r.valid_stocks}/{r.top_n}</p>
-                    </>
-                  )}
-                </div>
-              )
-            })}
+            <div className="p-4 rounded-xl border border-ink-200/40 bg-washi/30">
+              <p className="text-xs text-ink-500 mb-2">策略累计收益</p>
+              <p className={`font-serif text-2xl ${backtestResult.strategy?.total_return >= 0 ? 'text-moss' : 'text-rust'}`}>
+                {backtestResult.strategy?.total_return > 0 ? '+' : ''}{backtestResult.strategy?.total_return}%
+              </p>
+              <p className="text-xs text-ink-500 mt-1">
+                沪深300: <span className={backtestResult.benchmark?.total_return >= 0 ? 'text-moss' : 'text-rust'}>{backtestResult.benchmark?.total_return > 0 ? '+' : ''}{backtestResult.benchmark?.total_return}%</span>
+              </p>
+            </div>
+            <div className="p-4 rounded-xl border border-ink-200/40 bg-washi/30">
+              <p className="text-xs text-ink-500 mb-2">最大回撤 / 胜率</p>
+              <p className="font-serif text-2xl text-sumi">
+                {backtestResult.strategy?.max_drawdown}% / {backtestResult.strategy?.win_rate}%
+              </p>
+              <p className="text-xs text-ink-500 mt-1">
+                {backtestResult.periods} 个调仓周期
+              </p>
+            </div>
+            <div className="p-4 rounded-xl border border-ink-200/40 bg-washi/30">
+              <p className="text-xs text-ink-500 mb-2">回测区间</p>
+              <p className="font-serif text-xl text-sumi">
+                {backtestResult.start_date} 至 {backtestResult.end_date}
+              </p>
+              <p className="text-xs text-ink-500 mt-1">
+                频率: {backtestResult.frequency === 'daily' ? '日度' : backtestResult.frequency === 'weekly' ? '周度' : backtestResult.frequency === 'monthly' ? '月度' : '自动'}
+              </p>
+            </div>
           </div>
           <p className="text-[10px] text-ink-400 mt-4 leading-relaxed">
-            说明：基于历史快照选股，等权重买入后持有至今，价格已做后复权处理。此回测仅用于验证策略是否有明显缺陷，不代表未来收益。
+            说明：基于历史快照逐日调仓，等权重买入 Top 20，价格已做后复权处理。由于当前仅积累了 {backtestResult.periods} 个交易日的快照，此回测仅反映极短期表现，不能代表策略长期有效性。更长时间序列需要持续运行每日选股任务。
           </p>
+        </motion.div>
+      )}
+
+      {backtestResult?.error && (
+        <motion.div variants={itemVariants} className="glass-card rounded-2xl p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <History size={18} className="text-moss" />
+            <h3 className="font-display text-xl text-sumi">策略近期表现（滚动调仓 Top 20）</h3>
+          </div>
+          <p className="text-sm text-ink-500">{backtestResult.error}，需要更多历史快照才能生成有效回测。</p>
         </motion.div>
       )}
 
