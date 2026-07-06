@@ -38,7 +38,7 @@ function isActive(href: string, current: string) {
     <ViewTransitions />
   </head>
   <body class="min-h-screen flex">
-    <aside class="w-72 bg-white/40 backdrop-blur-2xl border-r border-white/50 flex flex-col fixed h-full z-20">
+    <aside class="w-72 bg-white/35 backdrop-blur-[32px] backdrop-saturate-[1.8] border-r border-white/60 flex flex-col fixed h-full z-20">
       <div class="p-8 pb-6 relative z-10">
         <a href="/" class="block group">
           <h1 class="font-display text-3xl font-medium text-sumi tracking-wide group-hover:opacity-80 transition-opacity duration-500">
@@ -54,15 +54,15 @@ function isActive(href: string, current: string) {
         {navItems.map((item) => {
           const itemActive = isActive(item.href, active);
           const activeClass = itemActive
-            ? 'bg-sumi text-ink-50 shadow-soft'
-            : 'text-ink-500 hover:bg-white/40 hover:text-sumi';
+            ? 'bg-sumi text-ink-50 shadow-glass'
+            : 'text-ink-500 hover:bg-white/45 hover:text-sumi';
           return (
             <a
               href={item.href}
               class={`group relative flex items-center justify-between px-5 py-4 rounded-xl transition-all duration-500 overflow-hidden ${activeClass}`}
             >
               <span class={`absolute inset-0 rounded-xl transition-opacity duration-500 ${itemActive ? 'opacity-0' : 'opacity-0 group-hover:opacity-100'}`}
-                style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.6) 0%, rgba(255,255,255,0.1) 100%)' }}
+                style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.7) 0%, rgba(255,255,255,0.15) 100%)' }}
               />
               <span class="relative z-10 text-sm font-medium tracking-wide">{item.label}</span>
               <span class={`relative z-10 text-[10px] tracking-widest uppercase ${itemActive ? 'text-ink-300' : 'text-ink-400'}`}
@@ -70,14 +70,14 @@ function isActive(href: string, current: string) {
                 {item.labelEn}
               </span>
               {itemActive && (
-                <span class="absolute right-3 w-1.5 h-1.5 rounded-full bg-moss" />
+                <span class="absolute right-3 w-1.5 h-1.5 rounded-full bg-moss shadow-[0_0_8px_rgba(107,123,95,0.6)]" />
               )}
             </a>
           );
         })}
       </nav>
 
-      <div class="p-6 border-t border-white/40 relative z-10">
+      <div class="p-6 border-t border-white/50 relative z-10">
         <div class="marble-card rounded-xl p-4">
           <p class="text-[10px] tracking-widest text-ink-500 uppercase mb-2">今日箴言</p>
           <p class="text-xs text-ink-700 leading-relaxed font-serif">

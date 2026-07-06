@@ -61,16 +61,14 @@ function StatCard({
   return (
     <motion.div
       variants={itemVariants}
-      className="glass-card rounded-2xl p-6 relative overflow-hidden group"
+      className="glass-card rounded-2xl p-6 relative overflow-hidden group hover:shadow-glass-lg transition-shadow duration-500"
     >
-      <div className="absolute top-0 right-0 p-4 opacity-30 group-hover:opacity-50 transition-opacity duration-500">
-        <Icon size={20} strokeWidth={1.5} />
+      <div className="absolute top-0 right-0 p-4 opacity-30 group-hover:opacity-55 transition-opacity duration-500">
+        <Icon size={22} strokeWidth={1.5} />
       </div>
       <p className="text-[10px] tracking-[0.2em] text-ink-500 uppercase mb-3">{label}</p>
       <p className="font-serif text-3xl text-sumi">{value}</p>
-      {subtext && (
-        <p className="text-xs text-ink-500 mt-2">{subtext}</p>
-      )}
+      {subtext && <p className="text-xs text-ink-500 mt-2">{subtext}</p>}
     </motion.div>
   )
 }
@@ -79,7 +77,7 @@ function ScoreBar({ label, value }: { label: string; value: number }) {
   return (
     <div className="flex items-center gap-3 text-xs">
       <span className="w-12 text-ink-500">{label}</span>
-      <div className="flex-1 h-1.5 bg-ink-200/50 rounded-full overflow-hidden">
+      <div className="flex-1 h-1.5 bg-white/50 rounded-full overflow-hidden backdrop-blur-sm">
         <motion.div
           initial={{ width: 0 }}
           animate={{ width: `${value * 100}%` }}
@@ -97,13 +95,22 @@ function CoverageBar({ label, value }: { label: string; value: number }) {
   return (
     <div className="flex items-center gap-3 text-xs">
       <span className="w-20 text-ink-500">{label}</span>
-      <div className="flex-1 h-1.5 bg-ink-200/50 rounded-full overflow-hidden">
+      <div className="flex-1 h-1.5 bg-white/50 rounded-full overflow-hidden backdrop-blur-sm">
         <div
           className={`h-full rounded-full ${pct >= 70 ? 'bg-moss' : pct >= 40 ? 'bg-amber-500' : 'bg-rust'}`}
           style={{ width: `${pct}%` }}
         />
       </div>
       <span className="w-10 text-right font-mono text-ink-600">{pct}%</span>
+    </div>
+  )
+}
+
+function MiniStat({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="glass-float rounded-xl p-4">
+      <p className="text-[10px] tracking-widest text-ink-500 uppercase mb-1">{label}</p>
+      {children}
     </div>
   )
 }
@@ -298,41 +305,43 @@ export default function Overview() {
       {/* Rolling Backtest Preview */}
       {backtestResult && !backtestResult.error && (
         <motion.div variants={itemVariants} className="glass-card rounded-2xl p-6">
-          <div className="flex items-center gap-3 mb-6">
-            <History size={18} className="text-moss" />
-            <div>
-              <p className="text-[10px] tracking-[0.2em] text-ink-500 uppercase">Strategy Backtest</p>
-              <h3 className="font-display text-xl text-sumi mt-1">策略近期表现（滚动调仓 Top 20）</h3>
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <History size={18} className="text-moss" />
+              <div>
+                <p className="text-[10px] tracking-[0.2em] text-ink-500 uppercase">Strategy Backtest</p>
+                <h3 className="font-display text-xl text-sumi mt-1">策略近期表现（滚动调仓 Top 20）</h3>
+              </div>
             </div>
+            <span className="text-[10px] px-3 py-1.5 rounded-full glass-float text-ink-500">
+              {backtestResult.periods} 个周期 · {backtestResult.frequency === 'daily' ? '日度' : backtestResult.frequency === 'weekly' ? '周度' : backtestResult.frequency === 'monthly' ? '月度' : '自动'}
+            </span>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="p-4 rounded-xl border border-ink-200/40 bg-washi/30">
-              <p className="text-xs text-ink-500 mb-2">策略累计收益</p>
+            <MiniStat label="策略累计收益">
               <p className={`font-serif text-2xl ${backtestResult.strategy?.total_return >= 0 ? 'text-moss' : 'text-rust'}`}>
                 {backtestResult.strategy?.total_return > 0 ? '+' : ''}{backtestResult.strategy?.total_return}%
               </p>
               <p className="text-xs text-ink-500 mt-1">
                 沪深300: <span className={backtestResult.benchmark?.total_return >= 0 ? 'text-moss' : 'text-rust'}>{backtestResult.benchmark?.total_return > 0 ? '+' : ''}{backtestResult.benchmark?.total_return}%</span>
               </p>
-            </div>
-            <div className="p-4 rounded-xl border border-ink-200/40 bg-washi/30">
-              <p className="text-xs text-ink-500 mb-2">最大回撤 / 胜率</p>
+            </MiniStat>
+            <MiniStat label="最大回撤 / 胜率">
               <p className="font-serif text-2xl text-sumi">
                 {backtestResult.strategy?.max_drawdown}% / {backtestResult.strategy?.win_rate}%
               </p>
               <p className="text-xs text-ink-500 mt-1">
-                {backtestResult.periods} 个调仓周期
-              </p>
-            </div>
-            <div className="p-4 rounded-xl border border-ink-200/40 bg-washi/30">
-              <p className="text-xs text-ink-500 mb-2">回测区间</p>
-              <p className="font-serif text-xl text-sumi">
                 {backtestResult.start_date} 至 {backtestResult.end_date}
               </p>
-              <p className="text-xs text-ink-500 mt-1">
-                频率: {backtestResult.frequency === 'daily' ? '日度' : backtestResult.frequency === 'weekly' ? '周度' : backtestResult.frequency === 'monthly' ? '月度' : '自动'}
+            </MiniStat>
+            <MiniStat label="随机对照组">
+              <p className={`font-serif text-2xl ${backtestResult.random?.total_return >= 0 ? 'text-moss' : 'text-rust'}`}>
+                {backtestResult.random?.total_return > 0 ? '+' : ''}{backtestResult.random?.total_return}%
               </p>
-            </div>
+              <p className="text-xs text-ink-500 mt-1">
+                同池随机选股收益
+              </p>
+            </MiniStat>
           </div>
           <p className="text-[10px] text-ink-400 mt-4 leading-relaxed">
             说明：基于历史快照逐日调仓，等权重买入 Top 20，价格已做后复权处理。由于当前仅积累了 {backtestResult.periods} 个交易日的快照，此回测仅反映极短期表现，不能代表策略长期有效性。更长时间序列需要持续运行每日选股任务。
@@ -353,53 +362,53 @@ export default function Overview() {
       {/* Main Content */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Top Stocks */}
-        <motion.div variants={itemVariants} className="lg:col-span-2 glass-card rounded-2xl p-6">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <p className="text-[10px] tracking-[0.2em] text-ink-500 uppercase">Top Rankings</p>
-              <h3 className="font-display text-xl text-sumi mt-1">今日优选</h3>
-            </div>
-            <a
-              href="/screener/"
-              className="text-xs text-ink-500 hover:text-sumi flex items-center gap-1 transition-colors"
-            >
-              查看全部
-              <ArrowRight size={12} />
-            </a>
-          </div>
-
-          <div className="space-y-4">
-            {topStocks.map((item: any, index: number) => (
+          <motion.div variants={itemVariants} className="lg:col-span-2 glass-card rounded-2xl p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <p className="text-[10px] tracking-[0.2em] text-ink-500 uppercase">Top Rankings</p>
+                <h3 className="font-display text-xl text-sumi mt-1">今日优选</h3>
+              </div>
               <a
-                key={item.symbol}
-                href={`/stock/?symbol=${item.symbol}`}
-                className="block group"
+                href="/screener/"
+                className="text-xs text-ink-500 hover:text-sumi flex items-center gap-1 transition-colors px-3 py-1.5 rounded-full glass-float"
               >
-                <div className="flex items-center gap-4 p-4 rounded-xl border border-transparent hover:border-ink-200/60 hover:bg-ink-100/30 transition-all duration-300"
-                >
-                  <span className="font-serif text-2xl text-ink-300 w-8">
-                    {String(index + 1).padStart(2, '0')}
-                  </span>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3">
-                      <span className="font-medium text-sumi">{item.name}</span>
-                      <span className="font-mono text-xs text-ink-500">{item.symbol}</span>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-ink-100 text-ink-600">
-                        {item.industry || '未分类'}
-                      </span>
-                    </div>
-                    <div className="mt-2">
-                      <ScoreBar label="综合" value={item.total_score} />
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <span className="font-serif text-2xl text-moss">{item.total_score.toFixed(3)}</span>
-                  </div>
-                </div>
+                查看全部
+                <ArrowRight size={12} />
               </a>
-            ))}
-          </div>
-        </motion.div>
+            </div>
+
+            <div className="space-y-3">
+              {topStocks.map((item: any, index: number) => (
+                <a
+                  key={item.symbol}
+                  href={`/stock/?symbol=${item.symbol}`}
+                  className="block group"
+                >
+                  <div className="flex items-center gap-4 p-4 rounded-xl border border-transparent hover:border-white/60 hover:bg-white/30 hover:backdrop-blur-md transition-all duration-300"
+                  >
+                    <span className="font-serif text-2xl text-ink-300 w-8">
+                      {String(index + 1).padStart(2, '0')}
+                    </span>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3">
+                        <span className="font-medium text-sumi">{item.name}</span>
+                        <span className="font-mono text-xs text-ink-500">{item.symbol}</span>
+                        <span className="text-[10px] px-2.5 py-0.5 rounded-full glass-float text-ink-600">
+                          {item.industry || '未分类'}
+                        </span>
+                      </div>
+                      <div className="mt-2">
+                        <ScoreBar label="综合" value={item.total_score} />
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <span className="font-serif text-2xl text-moss">{item.total_score.toFixed(3)}</span>
+                    </div>
+                  </div>
+                </a>
+              ))}
+            </div>
+          </motion.div>
 
         {/* Sidebar */}
         <div className="space-y-6">
@@ -474,7 +483,7 @@ export default function Overview() {
               <CoverageBar label="经营现金流" value={qualityDetail?.field_coverage?.operating_cash_flow} />
               <CoverageBar label="股息率" value={qualityDetail?.field_coverage?.dividend_yield} />
             </div>
-            <div className="mt-4 pt-4 border-t border-ink-200/40 flex items-center gap-2 text-xs text-ink-500">
+            <div className="mt-4 pt-4 border-t border-white/40 flex items-center gap-2 text-xs text-ink-500">
               {qualityDetail?.total ? (
                 <>
                   <Database size={12} />
@@ -485,7 +494,7 @@ export default function Overview() {
               )}
             </div>
             {qualityDetail?.estimation_note && (
-              <div className="mt-3 text-[11px] leading-relaxed text-ink-500 bg-ink-100/40 rounded-lg p-3">
+              <div className="mt-3 text-[11px] leading-relaxed text-ink-500 glass-float rounded-lg p-3">
                 {qualityDetail.estimation_note}
               </div>
             )}
@@ -521,39 +530,39 @@ export default function Overview() {
             <p className="text-[10px] tracking-[0.2em] text-ink-500 uppercase mb-4">
               System Status
             </p>
-              <div className="space-y-3 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-ink-500">数据源</span>
-                  <span className="text-sumi flex items-center gap-1.5">
-                    <Database size={12} className="text-ink-400" />
-                    {providerLabel}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-ink-500">定时任务</span>
-                  <span className="text-sumi">每日 19:00</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-ink-500">覆盖股票</span>
-                  <span className="text-sumi">{latestLog?.stocks_count ? `${latestLog.stocks_count} 只` : '—'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-ink-500">过滤策略</span>
-                  <span className="text-sumi">行业差异化</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-ink-500">数据可信度</span>
-                  <span className={`text-xs ${completenessPct && completenessPct >= 70 ? 'text-moss' : completenessPct && completenessPct >= 40 ? 'text-amber-600' : 'text-rust'}`}>
-                    {completenessPct !== null ? `${completenessPct}% 完整度` : '未知'}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-ink-500">最近更新</span>
-                  <span className="text-xs text-ink-600">
-                    {latestLog ? new Date(latestLog.time).toLocaleString('zh-CN') : '—'}
-                  </span>
-                </div>
+            <div className="space-y-3 text-sm">
+              <div className="flex justify-between items-center">
+                <span className="text-ink-500">数据源</span>
+                <span className="text-sumi flex items-center gap-1.5 glass-float px-2.5 py-1 rounded-lg">
+                  <Database size={12} className="text-ink-400" />
+                  {providerLabel}
+                </span>
               </div>
+              <div className="flex justify-between">
+                <span className="text-ink-500">定时任务</span>
+                <span className="text-sumi">每日 19:00</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-ink-500">覆盖股票</span>
+                <span className="text-sumi">{latestLog?.stocks_count ? `${latestLog.stocks_count} 只` : '—'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-ink-500">过滤策略</span>
+                <span className="text-sumi">行业差异化</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-ink-500">数据可信度</span>
+                <span className={`text-xs ${completenessPct && completenessPct >= 70 ? 'text-moss' : completenessPct && completenessPct >= 40 ? 'text-amber-600' : 'text-rust'}`}>
+                  {completenessPct !== null ? `${completenessPct}% 完整度` : '未知'}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-ink-500">最近更新</span>
+                <span className="text-xs text-ink-600">
+                  {latestLog ? new Date(latestLog.time).toLocaleString('zh-CN') : '—'}
+                </span>
+              </div>
+            </div>
           </motion.div>
         </div>
       </div>

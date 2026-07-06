@@ -11,7 +11,7 @@ import json
 from typing import List, Dict, Any
 from sqlalchemy.orm import Session
 
-from backend.data.factory import get_provider
+from backend.data.akshare_provider import AkShareProvider
 from backend.database.models import (
     Stock, FinancialMetric, StockScore, DailySnapshot, UpdateLog, Portfolio,
 )
@@ -28,8 +28,8 @@ def normalize_symbol(symbol: str) -> str:
 class ScreenerPipeline:
     """选股流水线。"""
 
-    def __init__(self, provider_name: str = "mock"):
-        self.provider = get_provider(provider_name)
+    def __init__(self, provider_name: str = "akshare"):
+        self.provider = AkShareProvider()
         self.filter_engine = FilterEngine()
         self.scoring_engine = ScoringEngine()
         self.now = datetime.utcnow()

@@ -18,7 +18,6 @@ from typing import List, Dict, Any, Optional
 from functools import wraps
 
 import pandas as pd
-from backend.data.provider import DataProvider
 
 
 # 允许通过环境变量控制请求重试和行业在线拉取
@@ -94,7 +93,7 @@ def _save_json_map(path: str, data: Dict[str, str]):
         print(f"[AkShare] 保存映射文件失败 {path}: {e}")
 
 
-class AkShareProvider(DataProvider):
+class AkShareProvider:
     """A股数据源：AkShare（生产级优化）。"""
 
     # 行业映射缓存，避免每次请求都重新拉取

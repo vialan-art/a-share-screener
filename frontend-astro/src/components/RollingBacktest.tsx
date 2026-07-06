@@ -151,7 +151,7 @@ export default function RollingBacktest() {
             <select
               value={topN}
               onChange={(e) => setTopN(Number(e.target.value))}
-              className="pl-9 pr-8 py-2.5 bg-ink-50 border border-ink-200/60 rounded-lg text-sm text-sumi focus:outline-none focus:border-moss/50 appearance-none min-w-[100px]"
+              className="glass-select min-w-[100px]"
             >
               <option value={5}>Top 5</option>
               <option value={10}>Top 10</option>
@@ -163,7 +163,7 @@ export default function RollingBacktest() {
             <select
               value={frequency}
               onChange={(e) => setFrequency(e.target.value)}
-              className="pl-9 pr-8 py-2.5 bg-ink-50 border border-ink-200/60 rounded-lg text-sm text-sumi focus:outline-none focus:border-moss/50 appearance-none min-w-[120px]"
+              className="glass-select min-w-[120px]"
             >
               <option value="auto">自动</option>
               <option value="monthly">月度</option>
@@ -265,12 +265,10 @@ export default function RollingBacktest() {
                 </div>
                 <p className="text-xs text-ink-400 mt-2">
                   共 {data.periods} 个调仓周期，Top {data.top_n} 等权
-                  {data.frequency && (
-              <span className="ml-2">· 频率: {data.frequency}</span>
-            )}
-            {data.end_date !== data.start_date && (
-              <span className="ml-2">· 实际可用数据至 {data.end_date}</span>
-            )}
+                  {data.frequency && <span className="ml-2">· 频率: {data.frequency}</span>}
+                  {data.end_date !== data.start_date && (
+                    <span className="ml-2">· 实际可用数据至 {data.end_date}</span>
+                  )}
                 </p>
               </div>
             </div>
@@ -280,7 +278,7 @@ export default function RollingBacktest() {
             <div className="overflow-x-auto">
               <table className="elegant-table">
                 <thead>
-                  <tr className="bg-ink-100/40">
+                  <tr className="bg-white/40">
                     <th className="px-6 py-4 text-left">调仓日</th>
                     <th className="px-6 py-4 text-right">策略收益</th>
                     <th className="px-6 py-4 text-right">随机收益</th>

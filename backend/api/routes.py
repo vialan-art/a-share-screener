@@ -417,29 +417,6 @@ def get_quality_detail(db: Session = Depends(get_db)):
         ],
     }
 
-
-@router.get("/backtest/simple")
-def run_simple_backtest(
-    snapshot_date: Optional[str] = None,
-    buy_date: Optional[str] = None,
-    end_date: Optional[str] = None,
-    top_n: int = 20,
-    db: Session = Depends(get_db),
-):
-    """最小回测：取快照 Top N 等权重持有至今，对比沪深300。"""
-    from backend.backtest.simple import SimpleBacktest
-
-    engine = SimpleBacktest(db)
-    if snapshot_date or buy_date:
-        return engine.run(
-            snapshot_date=snapshot_date,
-            buy_date=buy_date,
-            end_date=end_date,
-            top_n=top_n,
-        )
-    return {"results": engine.run_multiple_horizons(top_n=top_n)}
-
-
 @router.get("/backtest/rolling")
 def run_rolling_backtest(
     start_date: Optional[str] = None,

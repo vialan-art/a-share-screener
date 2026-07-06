@@ -69,6 +69,8 @@ export default {
       boxShadow: {
         'soft': '0 2px 20px -4px rgba(0, 0, 0, 0.04)',
         'glow': '0 0 40px -10px rgba(107, 123, 95, 0.15)',
+        'glass': 'inset 0 1px 1px rgba(255,255,255,0.65), inset 0 -1px 1px rgba(44,42,38,0.03), 0 1px 2px rgba(44,42,38,0.02), 0 16px 48px -16px rgba(44,42,38,0.10)',
+        'glass-lg': 'inset 0 1px 1px rgba(255,255,255,0.7), inset 0 -1px 1px rgba(44,42,38,0.03), 0 1px 2px rgba(44,42,38,0.02), 0 24px 64px -20px rgba(44,42,38,0.14)',
       },
     },
   },
