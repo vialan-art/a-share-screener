@@ -48,11 +48,12 @@ export async function fetchBacktest() {
   return res.json()
 }
 
-export async function fetchRollingBacktest(params?: { start_date?: string; end_date?: string; top_n?: number }) {
+export async function fetchRollingBacktest(params?: { start_date?: string; end_date?: string; top_n?: number; frequency?: string }) {
   const qs = new URLSearchParams()
   if (params?.start_date) qs.append('start_date', params.start_date)
   if (params?.end_date) qs.append('end_date', params.end_date)
   if (params?.top_n !== undefined) qs.append('top_n', String(params.top_n))
+  if (params?.frequency) qs.append('frequency', params.frequency)
   const res = await fetch(`${API_BASE}/backtest/rolling?${qs}`)
   return res.json()
 }

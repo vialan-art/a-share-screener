@@ -22,9 +22,9 @@ from backend.data.provider import DataProvider
 
 
 # 允许通过环境变量控制请求重试和行业在线拉取
-AKSHARE_MAX_RETRIES = int(os.environ.get("AKSHARE_MAX_RETRIES", "5"))
+AKSHARE_MAX_RETRIES = int(os.environ.get("AKSHARE_MAX_RETRIES", "3"))
 AKSHARE_BASE_DELAY = float(os.environ.get("AKSHARE_BASE_DELAY", "2.0"))
-AKSHARE_MAX_DELAY = float(os.environ.get("AKSHARE_MAX_DELAY", "30.0"))
+AKSHARE_MAX_DELAY = float(os.environ.get("AKSHARE_MAX_DELAY", "15.0"))
 AKSHARE_JITTER = float(os.environ.get("AKSHARE_JITTER", "0.5"))
 AKSHARE_FETCH_INDUSTRY_ONLINE = os.environ.get("AKSHARE_FETCH_INDUSTRY_ONLINE", "false").lower() in ("1", "true", "yes")
 
@@ -36,6 +36,10 @@ INDUSTRY_CACHE_FILE = os.environ.get(
 STATIC_INDUSTRY_FILE = os.environ.get(
     "STATIC_INDUSTRY_FILE",
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "static_industry_map.json"),
+)
+STATIC_SECTOR_FILE = os.environ.get(
+    "STATIC_SECTOR_FILE",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "static_sector_map.json"),
 )
 
 
@@ -98,14 +102,16 @@ class AkShareProvider(DataProvider):
     _industry_cache_time: Optional[datetime] = None
     _industry_cache_ttl = timedelta(hours=6)
 
-    # 静态 fallback：常见股票行业映射
+    # 静态 fallback：常见股票行业/板块映射
     _static_industry_map: Optional[Dict[str, str]] = None
+    _static_sector_map: Optional[Dict[str, str]] = None
 
     # spot 行情短缓存 TTL（避免 get_daily_prices 与 get_financial_metrics 重复调用）
     _spot_cache_ttl = timedelta(minutes=5)
+    _spot_source: str = "em"
 
     def _get_cached_spot(self) -> pd.DataFrame:
-        """获取带短缓存的 spot 行情。"""
+        """获取带短缓存的 spot 行情。EM 失败时回退到新浪 spot。"""
         now = datetime.utcnow()
         if (
             getattr(self, "_spot_cache", None) is not None
@@ -113,7 +119,13 @@ class AkShareProvider(DataProvider):
             and now - self._spot_cache_time < self._spot_cache_ttl
         ):
             return self._spot_cache
-        df = self._ak_stock_zh_a_spot_em()
+        try:
+            df = self._ak_stock_zh_a_spot_em()
+            self._spot_source = "em"
+        except Exception as e:
+            print(f"[AkShareProvider] EM spot 失败，回退新浪 spot: {type(e).__name__}: {str(e)[:80]}")
+            df = self._ak_stock_zh_a_spot_sina()
+            self._spot_source = "sina"
         self._spot_cache = df
         self._spot_cache_time = now
         return df
@@ -131,6 +143,12 @@ class AkShareProvider(DataProvider):
             built_in.update(file_map)  # 文件覆盖内置
             AkShareProvider._static_industry_map = built_in
         return AkShareProvider._static_industry_map
+
+    def _load_static_sector_fallback(self) -> Dict[str, str]:
+        """加载静态板块 fallback。"""
+        if AkShareProvider._static_sector_map is None:
+            AkShareProvider._static_sector_map = _load_json_map(STATIC_SECTOR_FILE)
+        return AkShareProvider._static_sector_map or {}
 
     @staticmethod
     def _built_in_industry_map() -> Dict[str, str]:
@@ -175,10 +193,56 @@ class AkShareProvider(DataProvider):
             "688303": "电力设备", "688599": "电力设备", "688981": "电子",
         }
 
-    @_retry_with_backoff()
-    def _ak_stock_info_a_code_name(self) -> pd.DataFrame:
+    @_retry_with_backoff(max_retries=2)
+    def _ak_stock_industry_change_cninfo(self, symbol: str) -> pd.DataFrame:
         import akshare as ak
-        return ak.stock_info_a_code_name()
+        return ak.stock_industry_change_cninfo(symbol=symbol)
+
+    def _fetch_balance_sheet_sina(self, symbol: str) -> Dict[str, Any]:
+        """从新浪财报获取真实资产负债率与总资产。
+
+        失败或数据缺失时返回空 dict，调用方继续使用估算值。
+        """
+        try:
+            df = self._ak_stock_financial_report_sina(symbol, "资产负债表")
+            if df is None or df.empty:
+                return {}
+            df = df.sort_values("报告日", ascending=False)
+            row = df.iloc[0]
+            total_assets = self._to_float(row.get("资产总计"))
+            total_liabilities = self._to_float(row.get("负债合计"))
+            if total_assets is None or total_assets <= 0:
+                return {}
+            debt_to_asset = (total_liabilities / total_assets * 100) if total_liabilities is not None else None
+            result = {"total_assets": total_assets / 1e8}  # 元 -> 亿元
+            if debt_to_asset is not None:
+                result["debt_to_asset"] = round(debt_to_asset, 2)
+            return result
+        except Exception as e:
+            print(f"[AkShareProvider] {symbol} 新浪资产负债表获取失败: {type(e).__name__}: {str(e)[:80]}")
+            return {}
+
+    def _fetch_avg_turnover_sina(self, symbol: str, days: int = 20) -> Optional[float]:
+        """从新浪日线计算最近 N 日平均换手率（小数形式）。"""
+        try:
+            from datetime import datetime, timedelta
+            end = datetime.now()
+            start = end - timedelta(days=days * 2 + 30)  # 留足够交易日
+            df = self._ak_stock_zh_a_daily_sina(
+                symbol,
+                start_date=start.strftime("%Y%m%d"),
+                end_date=end.strftime("%Y%m%d"),
+            )
+            if df is None or df.empty or "turnover" not in df.columns:
+                return None
+            df = df.sort_values("date")
+            avg = df["turnover"].tail(days).astype(float).mean()
+            if pd.isna(avg):
+                return None
+            return round(float(avg) * 100, 2)  # 转为百分比与 EM 保持一致
+        except Exception as e:
+            print(f"[AkShareProvider] {symbol} 新浪换手率获取失败: {type(e).__name__}: {str(e)[:80]}")
+            return None
 
     @_retry_with_backoff()
     def _ak_stock_yjbb_em(self, date: str) -> pd.DataFrame:
@@ -200,15 +264,29 @@ class AkShareProvider(DataProvider):
         import akshare as ak
         return ak.stock_board_industry_cons_em(symbol=symbol)
 
-    @_retry_with_backoff()
-    def _ak_stock_individual_info_em(self, symbol: str) -> pd.DataFrame:
+    @_retry_with_backoff(max_retries=2)
+    def _ak_stock_zh_a_spot_em(self) -> pd.DataFrame:
         import akshare as ak
-        return ak.stock_individual_info_em(symbol=symbol)
+        return ak.stock_zh_a_spot_em()
 
-    @_retry_with_backoff()
-    def _ak_stock_industry_change_cninfo(self, symbol: str) -> pd.DataFrame:
+    @_retry_with_backoff(max_retries=2)
+    def _ak_stock_zh_a_spot_sina(self) -> pd.DataFrame:
+        """新浪 spot 行情（EM 连接不稳定时的 fallback）。字段比 EM 少，但可用性更高。"""
         import akshare as ak
-        return ak.stock_industry_change_cninfo(symbol=symbol)
+        return ak.stock_zh_a_spot()
+
+    @_retry_with_backoff(max_retries=2)
+    def _ak_stock_financial_report_sina(self, symbol: str, report_type: str = "资产负债表") -> pd.DataFrame:
+        """新浪财务报表（资产负债表/利润表/现金流量表），免费且稳定。"""
+        import akshare as ak
+        return ak.stock_financial_report_sina(stock=symbol, symbol=report_type)
+
+    @_retry_with_backoff(max_retries=2)
+    def _ak_stock_zh_a_daily_sina(self, symbol: str, start_date: str, end_date: str) -> pd.DataFrame:
+        """新浪日线（含换手率），用于换手率和近期后复权价 fallback。"""
+        import akshare as ak
+        prefix = "sh" if symbol.startswith(("60", "68", "88", "89")) else "sz"
+        return ak.stock_zh_a_daily(symbol=f"{prefix}{symbol}", start_date=start_date, end_date=end_date, adjust="qfq")
 
     @_retry_with_backoff()
     def _ak_stock_yjbb_em_detail(self) -> pd.DataFrame:
@@ -226,14 +304,33 @@ class AkShareProvider(DataProvider):
 
     def get_stock_list(self) -> List[Dict[str, Any]]:
         """获取 A股所有股票列表，并补充行业分类。默认剔除 ST / *ST / 退市股票。"""
-        df = self._ak_stock_info_a_code_name()
-        industry_map = self._build_industry_map()
+        try:
+            df = self._ak_stock_info_a_code_name()
+            source = "official"
+        except Exception as e:
+            print(f"[AkShareProvider] 官方股票列表获取失败，回退新浪 spot: {type(e).__name__}: {str(e)[:80]}")
+            df = self._ak_stock_zh_a_spot_sina()
+            source = "sina"
+
+        industry_map = self._load_static_fallback()
+        sector_map = self._load_static_sector_fallback()
 
         result = []
         skipped_st = 0
         for _, row in df.iterrows():
-            symbol = str(row["code"]).strip().zfill(6)
-            name = str(row["name"]).strip()
+            if source == "sina":
+                raw = str(row.get("代码", "")).strip().lower()
+                if len(raw) >= 8 and raw[:2] in ("sh", "sz", "bj"):
+                    symbol = raw[2:].zfill(6)
+                else:
+                    symbol = "".join(ch for ch in raw if ch.isdigit()).zfill(6)
+                name = str(row.get("名称", "")).strip()
+            else:
+                symbol = str(row.get("code", "")).strip().zfill(6)
+                name = str(row.get("name", "")).strip()
+
+            if not symbol or len(symbol) != 6:
+                continue
 
             # 过滤 ST / *ST / 退市风险
             if name.startswith("*ST") or name.startswith("ST") or "退" in name:
@@ -250,12 +347,13 @@ class AkShareProvider(DataProvider):
                 market = "UNKNOWN"
 
             industry = industry_map.get(symbol, "")
+            sector = sector_map.get(symbol, "")
 
             result.append({
                 "symbol": symbol,
                 "name": name,
                 "industry": industry,
-                "sector": "",
+                "sector": sector,
                 "market": market,
             })
 
@@ -364,7 +462,9 @@ class AkShareProvider(DataProvider):
         """获取财务指标。
 
         使用 stock_yjbb_em（业绩快报）一次性获取全市场最新财报数据，
-        并结合当日行情市值补全缺失的 debt / cashflow / total_equity 字段。
+        并结合当日行情市值补全缺失字段。
+        关键改进：优先用 净利润/每股收益 反推总股本，从而摆脱对 EM spot 总市值的强依赖；
+        EM spot 不可用时自动回退到新浪 spot，估值由价格+每股指标计算得到。
         注意：业绩快报不是完整年报，部分指标为估算值，会在 data_source_note 中说明。
         """
         metrics = []
@@ -391,9 +491,9 @@ class AkShareProvider(DataProvider):
             "股票简称": "name",
             "报告期": "report_period",
             "每股收益": "eps",
-            "营业收入-营业收入": "revenue",
+            "营业收入-营业收入": "revenue_yuan",
             "营业收入-同比增长": "revenue_growth",
-            "净利润-净利润": "net_profit",
+            "净利润-净利润": "net_profit_yuan",
             "净利润-同比增长": "profit_growth",
             "扣非净利润-扣非净利润": "net_profit_deducted",
             "扣非净利润-同比增长": "profit_deducted_growth",
@@ -406,10 +506,11 @@ class AkShareProvider(DataProvider):
             "速动比率": "quick_ratio",
             "每股经营现金流量": "ocf_per_share",
             "销售毛利率": "gross_margin",
+            "所处行业": "industry",
         }
         df = df.rename(columns=column_map)
 
-        # 拿一次 spot 行情用于市值估算
+        # 拿一次 spot 行情用于价格/市值（带新浪 fallback）
         spot_map = self._fetch_spot_for_estimation()
 
         for symbol in symbols:
@@ -418,71 +519,121 @@ class AkShareProvider(DataProvider):
                 continue
             r = row.iloc[0]
 
-            revenue = self._to_float(r.get("revenue"), scale=1e8)  # 元转亿元
-            net_profit = self._to_float(r.get("net_profit"), scale=1e8)
-            total_assets = self._to_float(r.get("total_assets"), scale=1e8)
-            total_equity = self._to_float(r.get("total_equity"), scale=1e8)
-            debt_to_asset = self._to_float(r.get("debt_to_asset"))
-
             notes: List[str] = []
 
+            # 原始每股/总量指标
+            eps = self._to_float(r.get("eps"))  # 元/股
+            bps = self._to_float(r.get("bps"))  # 元/股
+            ocf_per_share = self._to_float(r.get("ocf_per_share"))  # 元/股
+            net_profit_yuan = self._to_float(r.get("net_profit_yuan"))  # 元
+            revenue_yuan = self._to_float(r.get("revenue_yuan"))  # 元
+            revenue = revenue_yuan / 1e8 if revenue_yuan is not None else None  # 亿元
+            net_profit = net_profit_yuan / 1e8 if net_profit_yuan is not None else None  # 亿元
+
+            # 最新价/市值
             spot = spot_map.get(symbol, {})
-            market_cap_yuan = spot.get("market_cap")  # 总市值（元）
+            market_cap_yuan = spot.get("market_cap")  # 总市值（元），EM 专有
             latest_price = spot.get("latest_price")
-            bps = self._to_float(r.get("bps"))  # 每股净资产（元）
-            ocf_per_share = self._to_float(r.get("ocf_per_share"))  # 每股经营现金流（元）
+            change_pct = spot.get("change_pct")
 
-            # 估算总股本（亿股）
+            # 估算总股本（股）：优先用 净利润/每股收益；否则用 总市值/最新价
             total_shares = None
-            if market_cap_yuan and latest_price and latest_price > 0:
-                total_shares = market_cap_yuan / latest_price / 1e8
+            if net_profit_yuan is not None and eps is not None and abs(eps) > 1e-9:
+                total_shares = net_profit_yuan / eps
+                notes.append("总股本由净利润/每股收益反推")
+            elif market_cap_yuan is not None and latest_price is not None and latest_price > 0:
+                total_shares = market_cap_yuan / latest_price
+                notes.append("总股本由总市值/最新价估算")
 
-            # 1) 偿债能力：debt_to_asset 缺失时使用 A 股平均近似
-            if debt_to_asset is None:
+            # 偿债能力：优先使用新浪财报真实数据
+            debt_to_asset = self._to_float(r.get("debt_to_asset"))
+            balance = self._fetch_balance_sheet_sina(symbol)
+            if balance.get("debt_to_asset") is not None:
+                debt_to_asset = balance["debt_to_asset"]
+                notes.append("资产负债率使用新浪财报数据")
+            elif debt_to_asset is None:
                 debt_to_asset = self.DEFAULT_DEBT_TO_ASSET
                 notes.append("资产负债率使用 A 股市场默认值 45% 估算")
             interest_bearing_debt_ratio = debt_to_asset * 0.6
 
-            # 2) total_equity：优先使用 yjbb 披露的净资产；否则用 每股净资产×总股本 估算
-            estimated_total_equity = False
-            if total_equity is None and total_shares is not None and bps is not None:
-                total_equity = round(total_shares * bps, 2)  # 亿元：元/股 × 亿股
-                estimated_total_equity = True
-                notes.append("净资产使用每股净资产×总市值估算")
+            # 净资产/总资产
+            total_equity_yuan = None
+            total_equity = self._to_float(r.get("total_equity"), scale=1e8)  # 亿元
+            if total_equity is None and bps is not None and total_shares is not None:
+                total_equity_yuan = bps * total_shares
+                total_equity = round(total_equity_yuan / 1e8, 2)
+                notes.append("净资产由每股净资产×总股本估算")
 
-            # 3) total_assets：由资产负债率反推
-            if total_assets is None and total_equity is not None and debt_to_asset is not None and debt_to_asset < 100:
-                total_assets = total_equity / (1 - debt_to_asset / 100)
-                notes.append("总资产使用净资产/(1-资产负债率)估算")
+            # 总资产：财报优先
+            total_assets = self._to_float(r.get("total_assets"), scale=1e8)  # 亿元
+            if balance.get("total_assets") is not None:
+                total_assets = balance["total_assets"]
+                notes.append("总资产使用新浪财报数据")
+            elif total_assets is None and total_equity is not None and debt_to_asset is not None and debt_to_asset < 100:
+                total_assets = round(total_equity / (1 - debt_to_asset / 100), 2)
+                notes.append("总资产由净资产/(1-资产负债率)估算")
 
-            # 4) 现金流：用 每股经营现金流量×总股本 估算
+            # 现金流
             operating_cash_flow: Optional[float] = None
             capital_expenditure: Optional[float] = None
             free_cash_flow: Optional[float] = None
             ocf_to_net_profit: Optional[float] = None
             if ocf_per_share is not None and total_shares is not None:
-                operating_cash_flow = round(ocf_per_share * total_shares, 2)  # 亿元
-                # 资本支出取经营现金流的 25%，作为粗略近似（制造业常见区间）
+                operating_cash_flow_yuan = ocf_per_share * total_shares
+                operating_cash_flow = round(operating_cash_flow_yuan / 1e8, 2)
                 capital_expenditure = round(-operating_cash_flow * 0.25, 2)
                 free_cash_flow = round(operating_cash_flow + capital_expenditure, 2)
-                if net_profit and net_profit != 0:
-                    ocf_to_net_profit = round(operating_cash_flow / net_profit, 2)
-                notes.append("现金流使用每股经营现金流×总市值估算，资本支出按 OCF 25% 近似")
+                notes.append("现金流由每股经营现金流×总股本估算，资本支出按 OCF 25% 近似")
 
-            # 5) ROA：业绩快报不披露，用净利润/总资产 估算
+            if ocf_per_share is not None and eps is not None and abs(eps) > 1e-9:
+                # OCF/NP = (OCF_per_share * shares) / (eps * shares) = OCF_per_share / eps
+                ocf_to_net_profit = round(ocf_per_share / eps, 2)
+
+            # ROA
             roa = self._to_float(r.get("roa"))
             if roa is None and net_profit is not None and total_assets is not None and total_assets > 0:
                 roa = round(net_profit / total_assets * 100, 2)
-                notes.append("ROA 使用净利润/总资产估算")
+                notes.append("ROA 由净利润/总资产估算")
 
-            # 净利率 = 净利润 / 营业收入
+            # 净利率
             net_margin = None
             if revenue is not None and revenue > 0 and net_profit is not None:
                 net_margin = round(net_profit / revenue * 100, 2)
 
+            # 估值指标（由价格和每股指标计算，不依赖 EM 估值字段）
+            pe_ttm: Optional[float] = None
+            pb: Optional[float] = None
+            ps_ttm: Optional[float] = None
+            market_cap: Optional[float] = None
+            if latest_price is not None:
+                if eps is not None and abs(eps) > 1e-9:
+                    pe_ttm = round(latest_price / eps, 2)
+                if bps is not None and bps > 0:
+                    pb = round(latest_price / bps, 2)
+                if total_shares is not None and revenue_yuan is not None and revenue_yuan > 0:
+                    ps_ttm = round((latest_price * total_shares) / revenue_yuan, 2)
+                if total_shares is not None:
+                    market_cap = round(latest_price * total_shares / 1e8, 2)
+                notes.append("PE/PB/PS 由最新价与每股指标/总股本计算")
+
+            # 行业：优先使用业绩快报的所处行业
+            industry = str(r.get("industry", "")).strip()
+
+            # 换手率：spot 缺失时用新浪日线 20 日均值
+            turnover = spot.get("turnover")
+            if turnover is None:
+                turnover = self._fetch_avg_turnover_sina(symbol, days=20)
+                if turnover is not None:
+                    notes.append("换手率由新浪日线 20 日均值计算")
+
             metrics.append({
                 "symbol": symbol,
                 "report_period": str(r.get("report_period", "")),
+                "name": str(r.get("name", "")).strip(),
+                "industry": industry,
+                "latest_price": latest_price,
+                "change_pct": change_pct,
+                "turnover": turnover,
                 "roe": self._to_float(r.get("roe")),
                 "roa": roa,
                 "gross_margin": self._to_float(r.get("gross_margin")),
@@ -504,31 +655,67 @@ class AkShareProvider(DataProvider):
                 "capital_expenditure": capital_expenditure,
                 "free_cash_flow": free_cash_flow,
                 "ocf_to_net_profit": ocf_to_net_profit,
-                "audit_opinion": "标准无保留意见",  # 业绩快报默认无审计意见字段
+                "pe_ttm": pe_ttm,
+                "pb": pb,
+                "ps_ttm": ps_ttm,
+                "market_cap": market_cap,
+                "dividend_yield": None,
+                "audit_opinion": "标准无保留意见",
                 "data_source": self.name,
                 "data_freshness": now,
-                "completeness_score": 0.0,  # 由 quality engine 计算
+                "completeness_score": 0.0,
                 "data_source_note": "; ".join(notes) if notes else "业绩快报原始字段完整",
             })
 
         return metrics
 
     def _fetch_spot_for_estimation(self) -> Dict[str, Dict[str, Any]]:
-        """获取 spot 行情，仅用于财务估算（总市值、最新价）。失败返回空 dict。"""
+        """获取 spot 行情，仅用于财务估算（最新价、涨跌幅）。失败返回空 dict。
+
+        支持东方财富 spot 和新浪 spot 两种格式。
+        """
         try:
             df = self._get_cached_spot()
-            df = df.rename(columns={
-                "代码": "symbol",
-                "最新价": "latest_price",
-                "总市值": "market_cap",
-            })
+            source = getattr(self, "_spot_source", "em")
+            if source == "sina":
+                df = df.rename(columns={
+                    "代码": "symbol_raw",
+                    "最新价": "latest_price",
+                    "涨跌幅": "change_pct",
+                })
+
+                def _norm_symbol(s):
+                    s = str(s).strip().lower()
+                    if len(s) >= 8 and s[:2] in ("sh", "sz", "bj"):
+                        s = s[2:]
+                    digits = "".join(ch for ch in s if ch.isdigit())
+                    return digits.zfill(6) if len(digits) == 6 else ""
+
+                df["symbol"] = df["symbol_raw"].apply(_norm_symbol)
+            else:
+                df = df.rename(columns={
+                    "代码": "symbol",
+                    "最新价": "latest_price",
+                    "涨跌幅": "change_pct",
+                    "总市值": "market_cap",
+                })
+                df["symbol"] = df["symbol"].astype(str).str.strip().str.zfill(6)
+
             df["latest_price"] = pd.to_numeric(df["latest_price"], errors="coerce")
-            df["market_cap"] = pd.to_numeric(df["market_cap"], errors="coerce")
+            df["change_pct"] = pd.to_numeric(df.get("change_pct"), errors="coerce")
+            if "market_cap" in df.columns:
+                df["market_cap"] = pd.to_numeric(df["market_cap"], errors="coerce")
+            else:
+                df["market_cap"] = None
+
             result = {}
             for _, r in df.iterrows():
-                sym = str(r["symbol"]).strip().zfill(6)
+                sym = str(r["symbol"]).strip()
+                if not sym or len(sym) != 6:
+                    continue
                 result[sym] = {
                     "latest_price": r["latest_price"],
+                    "change_pct": r["change_pct"],
                     "market_cap": r["market_cap"],
                 }
             return result
@@ -537,21 +724,47 @@ class AkShareProvider(DataProvider):
             return {}
 
     def get_daily_prices(self, symbols: List[str]) -> List[Dict[str, Any]]:
-        """获取日线行情（用于计算动量和估值）。"""
+        """获取日线行情（用于计算动量和估值）。
+
+        优先使用东方财富 spot（字段全）；失败/字段缺失时回退新浪 spot。
+        为避免覆盖 get_financial_metrics 已计算出的 PE/PB 等字段，结果中值为 None 的键会被剔除。
+        """
         now = datetime.utcnow()
         df = self._get_cached_spot()
+        source = getattr(self, "_spot_source", "em")
 
-        # 标准化列名
-        df = df.rename(columns={
-            "代码": "symbol",
-            "最新价": "latest_price",
-            "涨跌幅": "change_pct",
-            "换手率": "turnover",
-            "市盈率-动态": "pe_ttm",
-            "市净率": "pb",
-            "市销率": "ps_ttm",
-            "股息率": "dividend_yield",
-        })
+        if source == "sina":
+            df = df.rename(columns={
+                "代码": "symbol_raw",
+                "最新价": "latest_price",
+                "涨跌幅": "change_pct",
+            })
+
+            def _norm_symbol(s):
+                s = str(s).strip().lower()
+                if len(s) >= 8 and s[:2] in ("sh", "sz", "bj"):
+                    s = s[2:]
+                digits = "".join(ch for ch in s if ch.isdigit())
+                return digits.zfill(6) if len(digits) == 6 else ""
+
+            df["symbol"] = df["symbol_raw"].apply(_norm_symbol)
+            df["turnover"] = None
+            df["pe_ttm"] = None
+            df["pb"] = None
+            df["ps_ttm"] = None
+            df["dividend_yield"] = None
+        else:
+            df = df.rename(columns={
+                "代码": "symbol",
+                "最新价": "latest_price",
+                "涨跌幅": "change_pct",
+                "换手率": "turnover",
+                "市盈率-动态": "pe_ttm",
+                "市净率": "pb",
+                "市销率": "ps_ttm",
+                "股息率": "dividend_yield",
+            })
+            df["symbol"] = df["symbol"].astype(str).str.strip().str.zfill(6)
 
         # 只保留需要的列，缺失的列填充 None
         needed_cols = ["symbol", "latest_price", "change_pct", "turnover", "pe_ttm", "pb", "ps_ttm", "dividend_yield"]
@@ -564,20 +777,19 @@ class AkShareProvider(DataProvider):
         symbol_set = set(symbols)
         for _, r in df.iterrows():
             symbol = str(r["symbol"]).strip()
-            if symbol not in symbol_set:
+            if symbol not in symbol_set or len(symbol) != 6:
                 continue
-            result.append({
+            # 仅保留非 None 字段，避免覆盖财务指标中已计算的值
+            item = {
                 "symbol": symbol,
-                "latest_price": self._to_float(r.get("latest_price")),
-                "change_pct": self._to_float(r.get("change_pct")),
-                "turnover": self._to_float(r.get("turnover")),
-                "pe_ttm": self._to_float(r.get("pe_ttm")),
-                "pb": self._to_float(r.get("pb")),
-                "ps_ttm": self._to_float(r.get("ps_ttm")),
-                "dividend_yield": self._to_float(r.get("dividend_yield")),
                 "data_source": self.name,
                 "data_freshness": now,
-            })
+            }
+            for col in ["latest_price", "change_pct", "turnover", "pe_ttm", "pb", "ps_ttm", "dividend_yield"]:
+                value = self._to_float(r.get(col))
+                if value is not None:
+                    item[col] = value
+            result.append(item)
 
         return result
 

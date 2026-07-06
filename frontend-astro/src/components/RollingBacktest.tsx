@@ -98,16 +98,18 @@ export default function RollingBacktest() {
   const [loading, setLoading] = useState(false)
   const [topN, setTopN] = useState(20)
 
+  const [frequency, setFrequency] = useState('daily')
+
   async function load() {
     setLoading(true)
-    const res = await fetchRollingBacktest({ top_n: topN })
+    const res = await fetchRollingBacktest({ top_n: topN, frequency })
     setData(res)
     setLoading(false)
   }
 
   useEffect(() => {
     load()
-  }, [])
+  }, [frequency])
 
   const chartData = useMemo(() => {
     if (!data?.records) return []
@@ -139,7 +141,7 @@ export default function RollingBacktest() {
           <p className="text-[10px] tracking-[0.25em] text-ink-500 uppercase mb-2">Backtest</p>
           <h2 className="font-serif text-4xl text-sumi">滚动回测</h2>
           <p className="text-sm text-ink-500 mt-2">
-            每月第一个交易日调仓，等权持有 Top N，对比沪深300与随机选股
+            按所选频率调仓，等权持有 Top N，对比沪深300与随机选股
           </p>
         </div>
 
@@ -154,6 +156,19 @@ export default function RollingBacktest() {
               <option value={5}>Top 5</option>
               <option value={10}>Top 10</option>
               <option value={20}>Top 20</option>
+            </select>
+          </div>
+          <div className="relative">
+            <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
+            <select
+              value={frequency}
+              onChange={(e) => setFrequency(e.target.value)}
+              className="pl-9 pr-8 py-2.5 bg-ink-50 border border-ink-200/60 rounded-lg text-sm text-sumi focus:outline-none focus:border-moss/50 appearance-none min-w-[120px]"
+            >
+              <option value="auto">自动</option>
+              <option value="monthly">月度</option>
+              <option value="weekly">周度</option>
+              <option value="daily">日度</option>
             </select>
           </div>
           <motion.button
@@ -248,7 +263,15 @@ export default function RollingBacktest() {
                     {data.start_date} 至 {data.end_date}
                   </span>
                 </div>
-                <p className="text-xs text-ink-400 mt-2">共 {data.periods} 个调仓周期，Top {data.top_n} 等权</p>
+                <p className="text-xs text-ink-400 mt-2">
+                  共 {data.periods} 个调仓周期，Top {data.top_n} 等权
+                  {data.frequency && (
+              <span className="ml-2">· 频率: {data.frequency}</span>
+            )}
+            {data.end_date !== data.start_date && (
+              <span className="ml-2">· 实际可用数据至 {data.end_date}</span>
+            )}
+                </p>
               </div>
             </div>
           </motion.div>

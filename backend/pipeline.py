@@ -159,6 +159,11 @@ class ScreenerPipeline:
             stage_start = datetime.utcnow()
             _progress("[5/5] 运行过滤...")
             print("[5/5] 运行过滤...")
+            # 用业绩快报中的行业分类覆盖静态映射，提高过滤规则准确性
+            for s in stocks:
+                m = metrics_map.get(s["symbol"], {})
+                if m.get("industry"):
+                    s["industry"] = m["industry"]
             filter_results = self.filter_engine.evaluate_batch(stocks, metrics_map)
             passed_symbols = {r.symbol for r in filter_results if r.passed}
             filter_reasons_map = {r.symbol: r.reasons for r in filter_results}

@@ -445,13 +445,14 @@ def run_rolling_backtest(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     top_n: int = 20,
+    frequency: str = "auto",
     db: Session = Depends(get_db),
 ):
-    """滚动回测：每月第一个交易日调仓，等权持有 Top N，对比沪深300和随机选股。"""
+    """滚动回测：自动根据快照密度选择月度/周度调仓，等权持有 Top N，对比沪深300和随机选股。"""
     from backend.backtest.rolling import RollingBacktest
 
     engine = RollingBacktest(db)
-    return engine.run(start_date=start_date, end_date=end_date, top_n=top_n)
+    return engine.run(start_date=start_date, end_date=end_date, top_n=top_n, frequency=frequency)
 
 
 @router.get("/portfolio/latest")

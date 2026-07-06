@@ -247,3 +247,56 @@ class PriceService:
             "warmed_count": len(warmed),
             "symbols": warmed,
         }
+
+    def warm_cache_for_all_snapshots(
+        self,
+        top_n: int = 20,
+        years: int = 3,
+    ) -> Dict[str, Any]:
+        """为所有历史快照的 Top N 股票预热价格缓存，让滚动回测直接读本地。"""
+        dates = (
+            self.db.query(DailySnapshot.snapshot_date)
+            .distinct()
+            .order_by(DailySnapshot.snapshot_date.asc())
+            .all()
+        )
+        if not dates:
+            return {"error": "没有可用的快照数据"}
+
+        end_date = datetime.now().strftime("%Y-%m-%d")
+        warmed_symbols = set()
+        for (snapshot_date,) in dates:
+            start_dt = datetime.strptime(snapshot_date, "%Y-%m-%d") - timedelta(days=365 * years)
+            start_date = start_dt.strftime("%Y-%m-%d")
+
+            items = (
+                self.db.query(DailySnapshot)
+                .filter(DailySnapshot.snapshot_date == snapshot_date)
+                .order_by(DailySnapshot.total_score.desc())
+                .limit(top_n)
+                .all()
+            )
+            for item in items:
+                try:
+                    df = self.get_adj_close(item.symbol, start_date, end_date)
+                    if df is not None and not df.empty:
+                        warmed_symbols.add(item.symbol)
+                except Exception as e:
+                    print(f"[PriceService] warm {item.symbol} for {snapshot_date} failed: {e}")
+
+        # 预热沪深300指数
+        first_date = dates[0][0]
+        start_dt = datetime.strptime(first_date, "%Y-%m-%d") - timedelta(days=365 * years)
+        start_date = start_dt.strftime("%Y-%m-%d")
+        try:
+            self.get_index_return("000300.SH", start_date, end_date)
+            warmed_symbols.add("000300.SH")
+        except Exception as e:
+            print(f"[PriceService] warm 000300.SH failed: {e}")
+
+        return {
+            "snapshot_count": len(dates),
+            "start_date": start_date,
+            "end_date": end_date,
+            "warmed_count": len(warmed_symbols),
+        }
