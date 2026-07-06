@@ -676,11 +676,21 @@ class AkShareProvider:
 
         return metrics
 
+    # 网络不稳定时，spot 行情整体超时（秒），避免阻塞财务指标拉取
+    SPOT_TIMEOUT_SECONDS = float(os.environ.get("AKSHARE_SPOT_TIMEOUT_SECONDS", "25.0"))
+
     def _fetch_spot_for_estimation(self) -> Dict[str, Dict[str, Any]]:
-        """获取 spot 行情，仅用于财务估算（最新价、涨跌幅）。失败返回空 dict。
+        """获取 spot 行情，仅用于财务估算（最新价、涨跌幅）。失败或超时返回空 dict。
 
         支持东方财富 spot 和新浪 spot 两种格式。
         """
+        import signal
+
+        def _handle_timeout(signum, frame):
+            raise TimeoutError("spot 行情获取超时")
+
+        old_handler = signal.signal(signal.SIGALRM, _handle_timeout)
+        signal.setitimer(signal.ITIMER_REAL, self.SPOT_TIMEOUT_SECONDS)
         try:
             df = self._get_cached_spot()
             source = getattr(self, "_spot_source", "em")
@@ -726,9 +736,15 @@ class AkShareProvider:
                     "market_cap": r["market_cap"],
                 }
             return result
+        except TimeoutError:
+            print(f"[AkShareProvider] spot 行情获取超过 {self.SPOT_TIMEOUT_SECONDS}s，跳过，使用业绩快报每股指标计算估值")
+            return {}
         except Exception as e:
             print(f"[AkShareProvider] spot 行情获取失败，财务估算将受限: {e}")
             return {}
+        finally:
+            signal.setitimer(signal.ITIMER_REAL, 0)
+            signal.signal(signal.SIGALRM, old_handler)
 
     def get_daily_prices(self, symbols: List[str]) -> List[Dict[str, Any]]:
         """获取日线行情（用于计算动量和估值）。
