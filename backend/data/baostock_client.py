@@ -117,14 +117,15 @@ def fetch_hist_daily(
 
     # 数据清洗
     df["trade_date"] = df["date"].apply(_trade_date_to_yyyymmdd)
-    for col in ["open", "high", "low", "close", "volume"]:
+    for col in ["open", "high", "low", "close", "volume", "amount"]:
         df[col] = pd.to_numeric(df[col], errors="coerce")
     # BaoStock 后复权返回的 close 就是后复权收盘价
     df["adj_close"] = df["close"]
     df["adj_open"] = df["open"]
     df["vol"] = df["volume"]
+    df["turnover"] = df["amount"]
     return df[["trade_date", "open", "high", "low", "close",
-             "adj_open", "adj_close", "vol", "isST"]]
+             "adj_open", "adj_close", "vol", "turnover", "isST"]]
 
 
 def fetch_hist_daily_batch(

@@ -20,6 +20,10 @@ from backend.scoring.engine import ScoringEngine
 from backend.quality.engine import DataQualityEngine
 
 
+from backend.plugins.adapter import PluginAdapter
+from backend.plugins.data_service import PluginDataService
+
+
 def normalize_symbol(symbol: str) -> str:
     """统一代码格式。"""
     return str(symbol).strip().zfill(6)
@@ -28,10 +32,12 @@ def normalize_symbol(symbol: str) -> str:
 class ScreenerPipeline:
     """选股流水线。"""
 
-    def __init__(self, provider_name: str = "akshare"):
+    def __init__(self, provider_name: str = "akshare", use_plugins: bool = True, plugin_adapter: PluginAdapter = None):
         self.provider = AkShareProvider()
         self.filter_engine = FilterEngine()
         self.scoring_engine = ScoringEngine()
+        self.use_plugins = use_plugins
+        self.plugin_adapter = plugin_adapter or PluginAdapter()
         self.now = datetime.utcnow()
 
     def _persist_metrics(self, db: Session, metrics_map: Dict[str, Dict[str, Any]]):
@@ -171,11 +177,30 @@ class ScreenerPipeline:
             _progress(f"[5/5] 完成，{len(passed_symbols)}/{len(stocks)} 只通过过滤")
             print(f"[5/5] 完成，{len(passed_symbols)}/{len(stocks)} 只通过过滤")
 
+            passed_stocks = [s for s in stocks if s["symbol"] in passed_symbols]
+
+            # 6a. 如果启用插件，为通过过滤的股票补充技术面信号
+            if self.use_plugins and passed_stocks:
+                stage_start = datetime.utcnow()
+                _progress("[6a/6] 补充技术面信号...")
+                print("[6a/6] 补充技术面信号...")
+                try:
+                    plugin_data = PluginDataService(db)
+                    symbols_to_enrich = [s["symbol"] for s in passed_stocks]
+                    ohlcv_map = plugin_data.fetch_batch(symbols_to_enrich, days=252)
+                    metrics_map = self.plugin_adapter.enrich_batch(passed_stocks, metrics_map, ohlcv_map)
+                    stats["stage_times"]["plugin_signals"] = (datetime.utcnow() - stage_start).total_seconds()
+                    _progress(f"[6a/6] 技术面信号覆盖 {len(ohlcv_map)}/{len(symbols_to_enrich)} 只股票")
+                    print(f"[6a/6] 技术面信号覆盖 {len(ohlcv_map)}/{len(symbols_to_enrich)} 只股票")
+                except Exception as e:
+                    error_msg = f"补充技术面信号失败: {e}"
+                    print(error_msg)
+                    stats["errors"].append(error_msg)
+
             # 6. 评分
             stage_start = datetime.utcnow()
             _progress("[6/6] 运行评分...")
             print("[6/6] 运行评分...")
-            passed_stocks = [s for s in stocks if s["symbol"] in passed_symbols]
             score_results = self.scoring_engine.score_batch(passed_stocks, metrics_map)
             stats["stage_times"]["scoring"] = (datetime.utcnow() - stage_start).total_seconds()
             _progress(f"[6/6] 完成，评分 {len(score_results)} 只股票")

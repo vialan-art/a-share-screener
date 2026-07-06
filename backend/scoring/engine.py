@@ -29,17 +29,19 @@ class ScoringEngine:
 
     def __init__(
         self,
-        quality_weight: float = 0.45,
-        value_weight: float = 0.35,
+        quality_weight: float = 0.40,
+        value_weight: float = 0.30,
         momentum_weight: float = 0.10,
         stability_weight: float = 0.10,
+        technical_weight: float = 0.10,
         industry_neutral: bool = False,
     ):
-        total = quality_weight + value_weight + momentum_weight + stability_weight
+        total = quality_weight + value_weight + momentum_weight + stability_weight + technical_weight
         self.quality_weight = quality_weight / total
         self.value_weight = value_weight / total
         self.momentum_weight = momentum_weight / total
         self.stability_weight = stability_weight / total
+        self.technical_weight = technical_weight / total
         self.industry_neutral = industry_neutral
 
     @staticmethod
@@ -231,6 +233,37 @@ class ScoringEngine:
             return 0.5, details
         return sum(scores) / len(scores), details
 
+    def _technical_score(self, metrics: Dict[str, Any]) -> tuple[float, Dict[str, Any]]:
+        """技术面分：聚合所有插件信号（指标/形态/策略/基本面/情绪）。"""
+        signals = metrics.get("_plugin_signals", {})
+        if not signals:
+            return 0.5, {"note": "无插件信号"}
+
+        by_type: Dict[str, List[float]] = {}
+        for s in signals.values():
+            t = s["signal_type"]
+            if s["score"] is not None:
+                by_type.setdefault(t, []).append(s["score"])
+
+        def _avg(scores):
+            return sum(scores) / len(scores) if scores else 0.5
+
+        # 技术面维度内部权重：指标/形态/策略为主，基本面和情绪插件为辅
+        weights = {
+            "indicator": 0.35,
+            "pattern": 0.20,
+            "strategy": 0.20,
+            "fundamental": 0.15,
+            "sentiment": 0.10,
+        }
+        total_weight = sum(w for t, w in weights.items() if t in by_type)
+        if total_weight == 0:
+            return 0.5, {"note": "无可用插件分数"}
+
+        score = sum(_avg(by_type.get(t, [])) * w for t, w in weights.items() if t in by_type) / total_weight
+        details = {t: round(_avg(scores), 4) for t, scores in by_type.items()}
+        return round(score, 4), details
+
     def _build_benchmark(self, all_metrics: List[Dict[str, Any]]) -> Dict[str, List[float]]:
         """把一组股票的指标收集起来，用于计算百分位，并做缩尾处理。"""
         benchmark = {
@@ -275,12 +308,14 @@ class ScoringEngine:
             v, v_details = self._value_score(metrics, benchmark)
             s, s_details = self._stability_score(metrics)
             m_score, m_details = self._momentum_score(metrics, benchmark)
+            t_score, t_details = self._technical_score(metrics)
 
             total = (
                 q * self.quality_weight
                 + v * self.value_weight
                 + s * self.stability_weight
                 + m_score * self.momentum_weight
+                + t_score * self.technical_weight
             )
 
             results.append(ScoreResult(
@@ -296,11 +331,13 @@ class ScoringEngine:
                         "value": self.value_weight,
                         "stability": self.stability_weight,
                         "momentum": self.momentum_weight,
+                        "technical": self.technical_weight,
                     },
                     "quality": q_details,
                     "value": v_details,
                     "stability": s_details,
                     "momentum": m_details,
+                    "technical": t_details,
                 },
             ))
 
