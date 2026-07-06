@@ -248,6 +248,11 @@ class AkShareProvider:
         import akshare as ak
         return ak.stock_yjbb_em(date=date)
 
+    @_retry_with_backoff(max_retries=2)
+    def _ak_stock_info_a_code_name(self) -> pd.DataFrame:
+        import akshare as ak
+        return ak.stock_info_a_code_name()
+
     @_retry_with_backoff()
     def _ak_stock_zh_a_spot_em(self) -> pd.DataFrame:
         import akshare as ak
