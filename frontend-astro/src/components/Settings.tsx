@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Save, RotateCcw, Settings2, Key, Database, Globe } from 'lucide-react'
 import { fetchSettings, updateSettings, resetSettings } from '../services/api'
+import DissolveCard from '../components/DissolveCard'
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -9,8 +10,17 @@ const containerVariants = {
 }
 
 const itemVariants = {
-  hidden: { opacity: 0, y: 16 },
+  hidden: { opacity: 0, y: 20 },
   visible: { opacity: 1, y: 0 },
+}
+
+function SectionHeader({ number, label, title }: { number: string; label: string; title: string }) {
+  return (
+    <div className="mb-6">
+      <p className="editorial-label mb-3">( {number} ) · {label}</p>
+      <h2 className="font-display text-4xl lg:text-5xl text-slate-50">{title}</h2>
+    </div>
+  )
 }
 
 const settingGroups = [
@@ -87,13 +97,10 @@ export default function Settings() {
       variants={containerVariants}
       initial="hidden"
       animate="visible"
-      className="space-y-10 max-w-4xl"
+      className="space-y-10 max-w-4xl pb-12"
     >
-      <motion.div variants={itemVariants} className="flex items-end justify-between">
-        <div>
-          <p className="text-[10px] tracking-[0.25em] text-ink-500 uppercase mb-2">Configuration</p>
-          <h2 className="font-serif text-4xl text-sumi">设置</h2>
-        </div>
+      <motion.div variants={itemVariants} className="flex flex-col lg:flex-row lg:items-end justify-between gap-6">
+        <SectionHeader number="02" label="Configuration" title="设置" />
         <div className="flex gap-3">
           <motion.button
             whileHover={{ scale: 1.02 }}
@@ -121,71 +128,72 @@ export default function Settings() {
         <motion.div
           key={group.title}
           variants={itemVariants}
-          className="glass-card rounded-2xl p-8"
         >
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-10 h-10 rounded-full bg-ink-100 flex items-center justify-center">
-              <group.icon size={18} strokeWidth={1.5} className="text-ink-600" />
+          <DissolveCard className="liquid-glass p-8">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-10 h-10 rounded-full liquid-glass flex items-center justify-center">
+                <group.icon size={18} strokeWidth={1.5} className="text-cyan-300" />
+              </div>
+              <h3 className="font-display text-xl text-slate-50">{group.title}</h3>
             </div>
-            <h3 className="font-serif text-xl text-sumi">{group.title}</h3>
-          </div>
-          <div className="space-y-6">
-            {group.keys.map((key) => {
-              const item = settings[key]
-              if (!item) return null
-              return (
-                <div key={key} className="space-y-2">
-                  <label className="text-xs text-ink-600 font-medium flex items-center gap-2">
-                    {fieldLabels[key] || key}
-                  </label>
-                  {key === 'data_provider' || key === 'market_region' ? (
-                    <select
-                      value={item.value}
-                      onChange={(e) => updateValue(key, e.target.value)}
-                      className="w-full bg-white/50 border border-ink-200/60 rounded-xl px-4 py-3 text-sm text-sumi focus:outline-none focus:border-moss/60 transition-colors"
-                    >
-                      {key === 'data_provider' && (
-                        <>
-                          <option value="mock">Mock（模拟数据）</option>
-                          <option value="akshare">AkShare（A 股真实数据）</option>
-                          <option value="us">US（美股 Yahoo Finance）</option>
-                        </>
-                      )}
-                      {key === 'market_region' && (
-                        <>
-                          <option value="cn">A 股</option>
-                          <option value="us">美股</option>
-                        </>
-                      )}
-                    </select>
-                  ) : (
-                    <input
-                      type={key.includes('api_key') || key.includes('token') ? 'password' : 'text'}
-                      value={item.value}
-                      onChange={(e) => updateValue(key, e.target.value)}
-                      placeholder={item.description}
-                      className="w-full bg-white/50 border border-ink-200/60 rounded-xl px-4 py-3 text-sm text-sumi placeholder:text-ink-400 focus:outline-none focus:border-moss/60 transition-colors"
-                    />
-                  )}
-                  <p className="text-[10px] text-ink-400">{item.description}</p>
-                </div>
-              )
-            })}
-          </div>
+            <div className="space-y-6">
+              {group.keys.map((key) => {
+                const item = settings[key]
+                if (!item) return null
+                return (
+                  <div key={key} className="space-y-2">
+                    <label className="text-xs text-slate-600 font-medium flex items-center gap-2">
+                      {fieldLabels[key] || key}
+                    </label>
+                    {key === 'data_provider' || key === 'market_region' ? (
+                      <select
+                        value={item.value}
+                        onChange={(e) => updateValue(key, e.target.value)}
+                        className="w-full glass-select"
+                      >
+                        {key === 'data_provider' && (
+                          <>
+                            <option value="mock">Mock（模拟数据）</option>
+                            <option value="akshare">AkShare（A 股真实数据）</option>
+                          </>
+                        )}
+                        {key === 'market_region' && (
+                          <>
+                            <option value="cn">A 股</option>
+                          </>
+                        )}
+                      </select>
+                    ) : (
+                      <input
+                        type={key.includes('api_key') || key.includes('token') ? 'password' : 'text'}
+                        value={item.value}
+                        onChange={(e) => updateValue(key, e.target.value)}
+                        placeholder={item.description}
+                        className="w-full glass-select"
+                      />
+                    )}
+                    <p className="text-[10px] text-slate-400">{item.description}</p>
+                  </div>
+                )
+              })}
+            </div>
+          </DissolveCard>
         </motion.div>
       ))}
 
-      <motion.div variants={itemVariants} className="marble-card rounded-2xl p-6">
-        <div className="flex items-start gap-3">
-          <Globe size={18} className="text-ink-500 mt-0.5 shrink-0" />
-          <div>
-            <p className="text-xs font-medium text-ink-700 mb-1">配置说明</p>
-            <p className="text-xs text-ink-500 leading-relaxed">
-              修改数据源后，点击概览页的「运行选股」即可生效。AI 助手需要填写兼容 OpenAI 的 Base URL 和 API Key 后才会启用。
-              数据库 URL 留空表示使用默认 SQLite。
-            </p>
+      <motion.div variants={itemVariants}>
+        <DissolveCard className="glass-card rounded-2xl p-6">
+          <div className="flex items-start gap-3">
+            <Globe size={18} className="text-slate-500 mt-0.5 shrink-0" />
+            <div>
+              <p className="text-xs font-medium text-slate-600 mb-1">配置说明</p>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                修改数据源后，点击概览页的「运行选股」即可生效。AI 助手需要填写兼容 OpenAI 的 Base URL 和 API Key 后才会启用。
+                数据库 URL 留空表示使用默认 SQLite。
+              </p>
+            </div>
           </div>
-        </div>
+        </DissolveCard>
       </motion.div>
     </motion.div>
   )

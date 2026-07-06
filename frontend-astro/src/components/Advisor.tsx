@@ -2,6 +2,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useState, useRef, useEffect } from 'react'
 import { advisorChat } from '../services/api'
 import { Send, Sparkles, Bot, User } from 'lucide-react'
+import DissolveCard from '../components/DissolveCard'
 
 interface Message {
   role: 'user' | 'assistant'
@@ -18,8 +19,17 @@ const containerVariants = {
 }
 
 const itemVariants = {
-  hidden: { opacity: 0, y: 12 },
+  hidden: { opacity: 0, y: 16 },
   visible: { opacity: 1, y: 0 },
+}
+
+function SectionHeader({ number, label, title }: { number: string; label: string; title: string }) {
+  return (
+    <div className="mb-6">
+      <p className="editorial-label mb-3">( {number} ) · {label}</p>
+      <h2 className="font-display text-4xl lg:text-5xl text-slate-50">{title}</h2>
+    </div>
+  )
 }
 
 const suggestions = [
@@ -33,7 +43,7 @@ export default function Advisor() {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'assistant',
-      content: '你好，我是你的投资学习顾问。\n\n你可以问我关于财务指标、选股逻辑、行业分析的问题。我会用简单的方式解释，并区分事实与推断。',
+      content: '你好，我是你的投资学习顾问。\\n\\n你可以问我关于财务指标、选股逻辑、行业分析的问题。我会用简单的方式解释，并区分事实与推断。',
     },
   ])
   const [input, setInput] = useState('')
@@ -82,121 +92,120 @@ export default function Advisor() {
       variants={containerVariants}
       initial="hidden"
       animate="visible"
-      className="h-[calc(100vh-140px)] flex flex-col"
+      className="h-[calc(100vh-140px)] flex flex-col pb-12"
     >
-      <motion.div variants={itemVariants} className="flex items-end justify-between mb-6">
-        <div>
-          <p className="text-[10px] tracking-[0.25em] text-ink-500 uppercase mb-2">AI Advisor</p>
-          <h2 className="font-serif text-4xl text-sumi">投资顾问</h2>
-        </div>
-        <div className="flex items-center gap-2 text-xs text-ink-500">
-          <Sparkles size={14} className="text-moss" />
+      <motion.div variants={itemVariants} className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 mb-6">
+        <SectionHeader number="02" label="AI Advisor" title="投资顾问" />
+        <div className="flex items-center gap-2 text-xs text-slate-500">
+          <Sparkles size={14} className="text-cyan-300" />
           基于 OpenAI 兼容接口
         </div>
       </motion.div>
 
       <motion.div
         variants={itemVariants}
-        className="flex-1 glass-card rounded-2xl flex flex-col overflow-hidden"
+        className="flex-1 flex flex-col"
       >
-        <div className="flex-1 overflow-y-auto p-6 space-y-5">
-          <AnimatePresence>
-            {messages.map((msg, index) => (
-              <motion.div
-                key={index}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
-                className={`flex gap-4 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}
-              >
-                <div
-                  className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
-                    msg.role === 'user' ? 'bg-ink-200 text-ink-700' : 'bg-moss/10 text-moss'
-                  }`}
+        <DissolveCard className="flex-1 liquid-glass flex flex-col overflow-hidden">
+          <div className="flex-1 overflow-y-auto p-6 space-y-5">
+            <AnimatePresence>
+              {messages.map((msg, index) => (
+                <motion.div
+                  key={index}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  className={`flex gap-4 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}
                 >
-                  {msg.role === 'user' ? <User size={14} /> : <Bot size={14} />}
-                </div>
+                  <div
+                    className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 liquid-glass ${
+                      msg.role === 'user' ? 'text-slate-600' : 'text-cyan-300'
+                    }`}
+                  >
+                    {msg.role === 'user' ? <User size={14} /> : <Bot size={14} />}
+                  </div>
 
-                <div
-                  className={`max-w-[80%] px-5 py-3.5 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
-                    msg.role === 'user'
-                      ? 'bg-sumi text-ink-50 rounded-tr-sm'
-                      : 'bg-ink-100/60 text-ink-800 rounded-tl-sm'
-                  }`}
-                >
-                  {msg.content}
+                  <div
+                    className={`max-w-[80%] px-5 py-3.5 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
+                      msg.role === 'user'
+                        ? 'bg-slate-900 text-slate-50 rounded-tr-sm'
+                        : 'bg-slate-800/70 text-slate-200 rounded-tl-sm backdrop-blur-sm'
+                    }`}
+                  >
+                    {msg.content}
+                  </div>
+                </motion.div>
+              ))}
+            </AnimatePresence>
+
+            {loading && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="flex gap-4"
+              >
+                <div className="w-9 h-9 rounded-full liquid-glass text-cyan-300 flex items-center justify-center">
+                  <Bot size={14} />
+                </div>
+                <div className="px-5 py-3.5 rounded-2xl rounded-tl-sm bg-slate-800/70 backdrop-blur-sm">
+                  <div className="flex gap-1.5">
+                    {[0, 1, 2].map((i) => (
+                      <motion.div
+                        key={i}
+                        className="w-1.5 h-1.5 rounded-full bg-slate-400"
+                        animate={{ y: [0, -6, 0] }}
+                        transition={{
+                          duration: 0.6,
+                          repeat: Infinity,
+                          delay: i * 0.1,
+                        }}
+                      />
+                    ))}
+                  </div>
                 </div>
               </motion.div>
-            ))}
-          </AnimatePresence>
+            )}
 
-          {loading && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="flex gap-4"
-            >
-              <div className="w-8 h-8 rounded-full bg-moss/10 text-moss flex items-center justify-center">
-                <Bot size={14} />
-              </div>
-              <div className="px-5 py-3.5 rounded-2xl rounded-tl-sm bg-ink-100/60">
-                <div className="flex gap-1.5">
-                  {[0, 1, 2].map((i) => (
-                    <motion.div
-                      key={i}
-                      className="w-1.5 h-1.5 rounded-full bg-ink-400"
-                      animate={{ y: [0, -6, 0] }}
-                      transition={{
-                        duration: 0.6,
-                        repeat: Infinity,
-                        delay: i * 0.1,
-                      }}
-                    />
-                  ))}
-                </div>
-              </div>
-            </motion.div>
-          )}
+            <div ref={bottomRef} />
+          </div>
 
-          <div ref={bottomRef} />
-        </div>
+          <div className="border-t border-slate-700 p-6">
+            <div className="flex flex-wrap gap-2 mb-4">
+              {suggestions.map((suggestion) => (
+                <motion.button
+                  key={suggestion}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => handleSend(suggestion)}
+                  disabled={loading}
+                  className="text-xs px-3 py-1.5 rounded-full glass-float text-slate-600 hover:bg-slate-800 transition-colors"
+                >
+                  {suggestion}
+                </motion.button>
+              ))}
+            </div>
 
-        <div className="border-t border-ink-200/40 p-6">
-          <div className="flex flex-wrap gap-2 mb-4">
-            {suggestions.map((suggestion) => (
+            <div className="flex gap-3">
+              <input
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                placeholder="输入你的问题..."
+                className="flex-1 glass-select"
+              />
               <motion.button
-                key={suggestion}
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => handleSend(suggestion)}
-                disabled={loading}
-                className="text-xs px-3 py-1.5 rounded-full border border-ink-200/60 text-ink-600 hover:bg-ink-100/60 transition-colors"
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => handleSend()}
+                disabled={loading || !input.trim()}
+                className="px-6 py-3 bg-slate-900 text-slate-50 rounded-xl hover:bg-slate-950 transition-colors disabled:opacity-40"
               >
-                {suggestion}
+                <Send size={16} strokeWidth={1.5} />
               </motion.button>
-            ))}
+            </div>
           </div>
-
-          <div className="flex gap-3">
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-              placeholder="输入你的问题..."
-              className="flex-1 px-5 py-3 bg-ink-50 border border-ink-200/60 rounded-xl text-sm text-sumi placeholder:text-ink-400 focus:outline-none focus:border-moss/50 transition-colors"
-            />
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => handleSend()}
-              disabled={loading || !input.trim()}
-              className="px-6 py-3 bg-sumi text-ink-50 rounded-xl hover:bg-ink-800 transition-colors disabled:opacity-40"
-            >
-              <Send size={16} strokeWidth={1.5} />
-            </motion.button>
-          </div>
-        </div>
+        </DissolveCard>
       </motion.div>
     </motion.div>
   )

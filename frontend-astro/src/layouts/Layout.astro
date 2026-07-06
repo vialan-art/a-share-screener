@@ -1,5 +1,6 @@
 ---
-import { ViewTransitions } from 'astro:transitions';
+import { ClientRouter } from 'astro:transitions';
+import AngelBackground from '../components/AngelBackground.astro';
 import '../styles/global.css';
 
 export interface Props {
@@ -8,7 +9,7 @@ export interface Props {
   active?: string;
 }
 
-const { title = 'Pizarro · 选股', description = 'A rigorous, artist-portfolio style stock screener.', active = '' } = Astro.props;
+const { title = 'Pizarro · 选股', description = 'A professional A-share stock screener.', active = '' } = Astro.props;
 
 const navItems = [
   { href: '/', label: '概览', labelEn: 'Overview' },
@@ -35,61 +36,43 @@ function isActive(href: string, current: string) {
     <meta name="description" content={description} />
     <title>{title}</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <ViewTransitions />
+    <ClientRouter />
   </head>
-  <body class="min-h-screen flex">
-    <aside class="w-72 bg-white/35 backdrop-blur-[32px] backdrop-saturate-[1.8] border-r border-white/60 flex flex-col fixed h-full z-20">
-      <div class="p-8 pb-6 relative z-10">
-        <a href="/" class="block group">
-          <h1 class="font-display text-3xl font-medium text-sumi tracking-wide group-hover:opacity-80 transition-opacity duration-500">
-            Pizarro
-          </h1>
-          <p class="text-[10px] tracking-[0.25em] text-ink-500 uppercase mt-1">
-            A-Share Screener
-          </p>
+  <body class="min-h-screen">
+    <AngelBackground />
+    <div class="grain-overlay" aria-hidden="true"></div>
+
+    <header class="fixed top-0 left-0 right-0 z-50 px-6 lg:px-10 py-5">
+      <div class="max-w-7xl mx-auto flex items-center justify-between">
+        <a href="/" class="group flex items-center gap-3">
+          <span class="w-8 h-8 rounded-full bg-slate-100/90 text-slate-950 flex items-center justify-center text-sm font-bold font-display">P</span>
+          <span class="font-display text-xl tracking-tight text-slate-50">Pizarro</span>
         </a>
-      </div>
-
-      <nav class="flex-1 px-4 space-y-1 relative z-10">
-        {navItems.map((item) => {
-          const itemActive = isActive(item.href, active);
-          const activeClass = itemActive
-            ? 'bg-sumi text-ink-50 shadow-glass'
-            : 'text-ink-500 hover:bg-white/45 hover:text-sumi';
-          return (
-            <a
-              href={item.href}
-              class={`group relative flex items-center justify-between px-5 py-4 rounded-xl transition-all duration-500 overflow-hidden ${activeClass}`}
-            >
-              <span class={`absolute inset-0 rounded-xl transition-opacity duration-500 ${itemActive ? 'opacity-0' : 'opacity-0 group-hover:opacity-100'}`}
-                style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.7) 0%, rgba(255,255,255,0.15) 100%)' }}
-              />
-              <span class="relative z-10 text-sm font-medium tracking-wide">{item.label}</span>
-              <span class={`relative z-10 text-[10px] tracking-widest uppercase ${itemActive ? 'text-ink-300' : 'text-ink-400'}`}
+        <nav class="hidden md:flex items-center gap-1">
+          {navItems.map((item) => {
+            const itemActive = isActive(item.href, active);
+            return (
+              <a
+                href={item.href}
+                class={`group relative px-4 py-2 text-[12px] tracking-wide transition-colors duration-300 ${
+                  itemActive ? 'text-slate-50' : 'text-slate-500 hover:text-cyan-300'
+                }`}
               >
-                {item.labelEn}
-              </span>
-              {itemActive && (
-                <span class="absolute right-3 w-1.5 h-1.5 rounded-full bg-moss shadow-[0_0_8px_rgba(107,123,95,0.6)]" />
-              )}
-            </a>
-          );
-        })}
-      </nav>
-
-      <div class="p-6 border-t border-white/50 relative z-10">
-        <div class="marble-card rounded-xl p-4">
-          <p class="text-[10px] tracking-widest text-ink-500 uppercase mb-2">今日箴言</p>
-          <p class="text-xs text-ink-700 leading-relaxed font-serif">
-            "投资最重要的是不要亏钱，第二重要的是记住第一条。"
-          </p>
-          <p class="text-[10px] text-ink-400 mt-2 text-right">— Warren Buffett</p>
-        </div>
+                {item.label}
+                <span
+                  class={`absolute bottom-1 left-4 right-4 h-[1px] bg-gradient-to-r from-cyan-300 to-slate-400 rounded-full transition-transform duration-300 origin-left ${
+                    itemActive ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100'
+                  }`}
+                />
+              </a>
+            );
+          })}
+        </nav>
       </div>
-    </aside>
+    </header>
 
-    <main class="flex-1 ml-72 min-h-screen">
-      <div class="p-8 lg:p-12 max-w-7xl mx-auto animate-fade-in">
+    <main class="relative z-10 min-h-screen pt-20">
+      <div class="max-w-7xl mx-auto px-6 lg:px-10 pb-16">
         <slot />
       </div>
     </main>

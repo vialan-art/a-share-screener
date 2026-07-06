@@ -1,8 +1,12 @@
 ---
 import Layout from '../layouts/Layout.astro';
 import Overview from '../components/Overview';
+import EditorialHero from '../components/EditorialHero';
 ---
 
 <Layout active="/">
-  <Overview client:load />
+  <EditorialHero client:load />
+  <div class="py-16">
+    <Overview client:load />
+  </div>
 </Layout>

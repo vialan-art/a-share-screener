@@ -30,12 +30,12 @@ function MetricCard({ label, value, unit = '' }: { label: string; value: any; un
     : '—'
 
   return (
-    <div className="p-4 rounded-xl bg-ink-50/60 border border-ink-200/40 hover:border-moss/30 transition-colors">
-      <p className="text-[10px] tracking-[0.15em] text-ink-500 uppercase mb-1">{label}</p>
-      <p className="font-mono text-lg text-sumi">
+    <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-700/40 hover:border-cyan-400/30 transition-colors">
+      <p className="text-[10px] tracking-[0.15em] text-slate-500 uppercase mb-1">{label}</p>
+      <p className="font-mono text-lg text-slate-50">
         {displayValue}
         {unit && value !== null && value !== undefined && (
-          <span className="text-sm text-ink-500 ml-0.5">{unit}</span>
+          <span className="text-sm text-slate-500 ml-0.5">{unit}</span>
         )}
       </p>
     </div>
@@ -49,23 +49,23 @@ function QualityBanner({ quality }: { quality: any }) {
   const isReliable = completeness >= 0.7 && issues.length === 0
 
   return (
-    <div className={`rounded-xl p-4 border ${isReliable ? 'bg-moss/5 border-moss/20' : 'bg-amber-50/60 border-amber-200/60'}`}>
+    <div className={`rounded-xl p-4 border ${isReliable ? 'bg-cyan-400/5 border-cyan-400/20' : 'bg-fuchsia-400/5 border-fuchsia-400/20'}`}>
       <div className="flex items-start gap-3">
         {isReliable ? (
-          <Database size={16} className="text-moss mt-0.5 shrink-0" />
+          <Database size={16} className="text-cyan-300 mt-0.5 shrink-0" />
         ) : (
-          <ShieldAlert size={16} className="text-amber-600 mt-0.5 shrink-0" />
+          <ShieldAlert size={16} className="text-fuchsia-300 mt-0.5 shrink-0" />
         )}
         <div className="flex-1">
           <div className="flex items-center justify-between mb-1">
-            <p className={`text-xs font-medium ${isReliable ? 'text-moss' : 'text-amber-700'}`}>
+            <p className={`text-xs font-medium ${isReliable ? 'text-cyan-300' : 'text-fuchsia-300'}`}>
               数据质量
             </p>
-            <span className="text-[10px] text-ink-500">
+            <span className="text-[10px] text-slate-500">
               完整度 {(completeness * 100).toFixed(0)}%
             </span>
           </div>
-          <div className="flex items-center gap-2 text-xs text-ink-600 mb-2">
+          <div className="flex items-center gap-2 text-xs text-slate-600 mb-2">
             <Clock size={12} />
             <span>来源: {quality.source || 'unknown'}</span>
             <span>·</span>
@@ -74,20 +74,20 @@ function QualityBanner({ quality }: { quality: any }) {
           {issues.length > 0 && (
             <ul className="space-y-1">
               {issues.map((issue: string, idx: number) => (
-                <li key={idx} className="text-xs text-amber-700 flex items-start gap-1.5">
-                  <span className="w-1 h-1 rounded-full bg-amber-500 mt-1.5 shrink-0" />
+                  <li key={idx} className="text-xs text-fuchsia-300 flex items-start gap-1.5">
+                    <span className="w-1 h-1 rounded-full bg-fuchsia-400 mt-1.5 shrink-0" />
                   {issue}
                 </li>
               ))}
             </ul>
           )}
           {quality.data_source_note && (
-            <div className="mt-3 rounded-lg border border-ink-200/40 bg-ink-50/40 p-3">
-              <p className="text-[10px] tracking-widest text-ink-500 uppercase mb-1">数据来源说明</p>
-              <p className="text-xs text-ink-600 leading-relaxed">{quality.data_source_note}</p>
+            <div className="mt-3 rounded-lg border border-slate-700/40 bg-slate-900/40 p-3">
+              <p className="text-[10px] tracking-widest text-slate-500 uppercase mb-1">数据来源说明</p>
+              <p className="text-xs text-slate-600 leading-relaxed">{quality.data_source_note}</p>
             </div>
           )}
-          <p className="text-[10px] text-ink-400 mt-2">
+          <p className="text-[10px] text-slate-400 mt-2">
             数据来自第三方接口，可能存在延迟或错误，仅供学习研究，不构成投资建议。
           </p>
         </div>
@@ -126,9 +126,9 @@ export default function StockDetail() {
 
   if (!data) {
     return (
-      <div className="h-96 flex items-center justify-center text-ink-500">
+      <div className="h-96 flex items-center justify-center text-slate-500">
         <div className="text-center">
-          <div className="w-8 h-8 border-2 border-ink-300 border-t-moss rounded-full animate-spin mx-auto mb-4" />
+          <div className="w-8 h-8 border-2 border-slate-500 border-t-cyan-400 rounded-full animate-spin mx-auto mb-4" />
           <p className="text-sm tracking-wide">正在加载...</p>
         </div>
       </div>
@@ -145,7 +145,7 @@ export default function StockDetail() {
       <motion.div variants={itemVariants}>
         <a
           href="/screener/"
-          className="inline-flex items-center gap-2 text-sm text-ink-500 hover:text-sumi transition-colors mb-6"
+          className="inline-flex items-center gap-2 text-sm text-slate-500 hover:text-slate-50 transition-colors mb-6"
         >
           <ArrowLeft size={14} strokeWidth={1.5} />
           返回选股池
@@ -156,30 +156,30 @@ export default function StockDetail() {
         variants={itemVariants}
         className="glass-card rounded-2xl p-8 relative overflow-hidden"
       >
-        <div className="absolute top-0 right-0 w-64 h-64 bg-moss/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+        <div className="absolute top-0 right-0 w-64 h-64 bg-cyan-400/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
         <div className="relative">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-[10px] tracking-[0.25em] text-ink-500 uppercase">{data.market} · {data.symbol}</p>
-              <h2 className="font-serif text-5xl text-sumi mt-2">{data.name}</h2>
+              <p className="text-[10px] tracking-[0.25em] text-slate-500 uppercase">{data.market} · {data.symbol}</p>
+              <h2 className="font-serif text-5xl text-slate-50 mt-2">{data.name}</h2>
               <div className="flex items-center gap-3 mt-4">
-                <span className="text-xs px-3 py-1.5 rounded-full bg-ink-100 text-ink-700">
+                <span className="text-xs px-3 py-1.5 rounded-full bg-slate-800 text-slate-600">
                   {data.industry || '未分类'}
                 </span>
                 {score.passed_filters ? (
-                  <span className="inline-flex items-center gap-1 text-xs text-moss">
+                  <span className="inline-flex items-center gap-1 text-xs text-cyan-300">
                     <CheckCircle2 size={12} /> 通过过滤
                   </span>
                 ) : (
-                  <span className="inline-flex items-center gap-1 text-xs text-rust">
+                  <span className="inline-flex items-center gap-1 text-xs text-fuchsia-300">
                     <AlertTriangle size={12} /> 未通过过滤
                   </span>
                 )}
               </div>
             </div>
             <div className="text-right">
-              <p className="text-[10px] tracking-[0.2em] text-ink-500 uppercase">综合得分</p>
-              <p className={`font-serif text-6xl ${score.total >= 0.7 ? 'text-moss' : 'text-sumi'}`}>
+              <p className="text-[10px] tracking-[0.2em] text-slate-500 uppercase">综合得分</p>
+              <p className={`font-serif text-6xl ${score.total >= 0.7 ? 'text-cyan-300' : 'text-slate-50'}`}>
                 {score.total?.toFixed(3) || '—'}
               </p>
             </div>
@@ -189,22 +189,22 @@ export default function StockDetail() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <motion.div variants={itemVariants} className="glass-card rounded-2xl p-6">
-          <p className="text-[10px] tracking-[0.2em] text-ink-500 uppercase mb-6">Score Radar</p>
+          <p className="text-[10px] tracking-[0.2em] text-slate-500 uppercase mb-6">Score Radar</p>
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
               <RadarChart cx="50%" cy="50%" outerRadius="70%" data={radarData}>
-                <PolarGrid stroke="#dddad4" />
+                <PolarGrid stroke="#94a3b8" />
                 <PolarAngleAxis
                   dataKey="subject"
-                  tick={{ fill: '#6e665c', fontSize: 12 }}
+                  tick={{ fill: '#94a3b8', fontSize: 12 }}
                 />
                 <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
                 <Radar
                   name={data.name}
                   dataKey="A"
-                  stroke="#6b7b5f"
+                  stroke="#7dd3fc"
                   strokeWidth={2}
-                  fill="#6b7b5f"
+                  fill="#7dd3fc"
                   fillOpacity={0.2}
                 />
               </RadarChart>
@@ -213,7 +213,7 @@ export default function StockDetail() {
         </motion.div>
 
       <motion.div variants={itemVariants} className="lg:col-span-2 glass-card rounded-2xl p-6">
-        <p className="text-[10px] tracking-[0.2em] text-ink-500 uppercase mb-6">Key Metrics</p>
+        <p className="text-[10px] tracking-[0.2em] text-slate-500 uppercase mb-6">Key Metrics</p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <MetricCard label="ROE" value={metrics.roe} unit="%" />
           <MetricCard label="ROA" value={metrics.roa} unit="%" />
@@ -244,12 +244,12 @@ export default function StockDetail() {
       {!score.passed_filters && score.filter_reasons && score.filter_reasons !== '[]' && (
         <motion.div
           variants={itemVariants}
-          className="glass-card rounded-2xl p-6 border-rust/20 bg-rust/5"
+          className="glass-card rounded-2xl p-6 border-fuchsia-400/20 bg-fuchsia-400/5"
         >
-          <p className="text-[10px] tracking-[0.2em] text-rust uppercase mb-3">Filter Failures</p>
+          <p className="text-[10px] tracking-[0.2em] text-fuchsia-300 uppercase mb-3">Filter Failures</p>
           <ul className="space-y-2">
             {JSON.parse(score.filter_reasons).map((reason: string, idx: number) => (
-              <li key={idx} className="text-sm text-rust flex items-start gap-2">
+              <li key={idx} className="text-sm text-fuchsia-300 flex items-start gap-2">
                 <AlertTriangle size={14} className="mt-0.5 shrink-0" />
                 {reason}
               </li>

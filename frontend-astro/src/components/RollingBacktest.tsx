@@ -12,6 +12,7 @@ import {
   Legend,
 } from 'recharts'
 import { TrendingUp, Activity, Calendar } from 'lucide-react'
+import DissolveCard from '../components/DissolveCard'
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -19,8 +20,17 @@ const containerVariants = {
 }
 
 const itemVariants = {
-  hidden: { opacity: 0, y: 12 },
+  hidden: { opacity: 0, y: 16 },
   visible: { opacity: 1, y: 0 },
+}
+
+function SectionHeader({ number, label, title }: { number: string; label: string; title: string }) {
+  return (
+    <div className="mb-6">
+      <p className="editorial-label mb-3">( {number} ) · {label}</p>
+      <h2 className="font-display text-4xl lg:text-5xl text-slate-50">{title}</h2>
+    </div>
+  )
 }
 
 interface Record {
@@ -76,20 +86,20 @@ function StatCard({
   const colorClass =
     positiveGood || value === 0
       ? isPositive
-        ? 'text-moss'
-        : 'text-rose-600'
+        ? 'text-cyan-300'
+        : 'text-fuchsia-300'
       : isPositive
-        ? 'text-rose-600'
-        : 'text-moss'
+        ? 'text-fuchsia-300'
+        : 'text-cyan-300'
   return (
-    <div className="glass-card rounded-xl p-4">
-      <p className="text-[10px] tracking-widest text-ink-500 uppercase mb-1">{label}</p>
-      <p className={`font-serif text-2xl ${colorClass}`}>
+    <DissolveCard className="liquid-glass p-5">
+      <p className="editorial-label mb-2">{label}</p>
+      <p className={`font-display text-3xl ${colorClass}`}>
         {value > 0 ? '+' : ''}
         {value.toFixed(2)}
         {suffix}
       </p>
-    </div>
+    </DissolveCard>
   )
 }
 
@@ -97,7 +107,6 @@ export default function RollingBacktest() {
   const [data, setData] = useState<Result | null>(null)
   const [loading, setLoading] = useState(false)
   const [topN, setTopN] = useState(20)
-
   const [frequency, setFrequency] = useState('daily')
 
   async function load() {
@@ -134,20 +143,14 @@ export default function RollingBacktest() {
       variants={containerVariants}
       initial="hidden"
       animate="visible"
-      className="space-y-6"
+      className="space-y-8 pb-12"
     >
-      <motion.div variants={itemVariants} className="flex items-end justify-between">
-        <div>
-          <p className="text-[10px] tracking-[0.25em] text-ink-500 uppercase mb-2">Backtest</p>
-          <h2 className="font-serif text-4xl text-sumi">滚动回测</h2>
-          <p className="text-sm text-ink-500 mt-2">
-            按所选频率调仓，等权持有 Top N，对比沪深300与随机选股
-          </p>
-        </div>
+      <motion.div variants={itemVariants} className="flex flex-col lg:flex-row lg:items-end justify-between gap-6">
+        <SectionHeader number="02" label="Backtest" title="滚动回测" />
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <div className="relative">
-            <TrendingUp size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
+            <TrendingUp size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <select
               value={topN}
               onChange={(e) => setTopN(Number(e.target.value))}
@@ -159,13 +162,12 @@ export default function RollingBacktest() {
             </select>
           </div>
           <div className="relative">
-            <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
+            <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <select
               value={frequency}
               onChange={(e) => setFrequency(e.target.value)}
               className="glass-select min-w-[120px]"
             >
-              <option value="auto">自动</option>
               <option value="monthly">月度</option>
               <option value="weekly">周度</option>
               <option value="daily">日度</option>
@@ -184,7 +186,7 @@ export default function RollingBacktest() {
       </motion.div>
 
       {data?.error ? (
-        <motion.div variants={itemVariants} className="glass-card rounded-2xl p-8 text-center text-ink-500">
+        <motion.div variants={itemVariants} className="liquid-glass p-8 text-center text-slate-500">
           {data.error}
         </motion.div>
       ) : data ? (
@@ -197,133 +199,138 @@ export default function RollingBacktest() {
           </motion.div>
 
           <motion.div variants={itemVariants} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 glass-card rounded-2xl p-6">
-              <div className="flex items-center gap-2 mb-6">
-                <Activity size={16} className="text-ink-400" />
-                <h3 className="font-medium text-sumi">净值走势</h3>
+            <DissolveCard className="lg:col-span-2 liquid-glass p-6 lg:p-8">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 rounded-full liquid-glass flex items-center justify-center">
+                  <Activity size={18} className="text-cyan-300" />
+                </div>
+                <h3 className="font-display text-xl text-slate-50">净值走势</h3>
               </div>
               <div className="h-80">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={chartData} margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" />
-                    <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="#9ca3af" />
-                    <YAxis tick={{ fontSize: 11 }} stroke="#9ca3af" unit="%" />
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(90,90,106,0.15)" />
+                    <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#94a3b8' }} stroke="#94a3b8" />
+                    <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} stroke="#94a3b8" unit="%" />
                     <Tooltip
-                      contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}
+                      contentStyle={{
+                        borderRadius: '12px',
+                        border: '1px solid rgba(37,37,50,0.6)',
+                        boxShadow: '0 4px 20px rgba(0,0,0,0.35)',
+                        background: 'rgba(22,22,29,0.92)',
+                        backdropFilter: 'blur(12px)',
+                        color: '#f0f4f8',
+                      }}
                       formatter={(v: number) => [`${v.toFixed(2)}%`, '']}
                     />
                     <Legend />
-                    <Line type="monotone" dataKey="策略" stroke="#4a6c4b" strokeWidth={2} dot={false} />
-                    <Line type="monotone" dataKey="随机" stroke="#9ca3af" strokeWidth={2} dot={false} strokeDasharray="4 4" />
-                    <Line type="monotone" dataKey="沪深300" stroke="#d97706" strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="策略" stroke="#38bdf8" strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="随机" stroke="#c4b5fd" strokeWidth={2} dot={false} strokeDasharray="4 4" />
+                    <Line type="monotone" dataKey="沪深300" stroke="#f0abfc" strokeWidth={2} dot={false} />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
-            </div>
+            </DissolveCard>
 
-            <div className="glass-card rounded-2xl p-6 space-y-6">
+            <DissolveCard className="liquid-glass p-6 space-y-6">
               <div>
-                <p className="text-[10px] tracking-widest text-ink-500 uppercase mb-3">对比摘要</p>
+                <p className="editorial-label mb-4">对比摘要</p>
                 <div className="space-y-3">
                   <div className="flex justify-between text-sm">
-                    <span className="text-ink-500">策略 / 随机 / 基准</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-sumi">累计收益</span>
-                    <span className="font-mono">
+                    <span className="text-slate-500">累计收益</span>
+                    <span className="font-mono text-slate-50">
                       {data.strategy.total_return}% / {data.random.total_return}% / {data.benchmark.total_return}%
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-sumi">年化收益</span>
-                    <span className="font-mono">
+                    <span className="text-slate-500">年化收益</span>
+                    <span className="font-mono text-slate-50">
                       {data.strategy.annualized_return}% / {data.random.annualized_return}% / {data.benchmark.annualized_return}%
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-sumi">最大回撤</span>
-                    <span className="font-mono">
+                    <span className="text-slate-500">最大回撤</span>
+                    <span className="font-mono text-slate-50">
                       {data.strategy.max_drawdown}% / {data.random.max_drawdown}% / {data.benchmark.max_drawdown}%
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-sumi">胜率</span>
-                    <span className="font-mono">
+                    <span className="text-slate-500">胜率</span>
+                    <span className="font-mono text-slate-50">
                       {data.strategy.win_rate}% / {data.random.win_rate}% / —
                     </span>
                   </div>
                 </div>
               </div>
 
-              <div>
-                <p className="text-[10px] tracking-widest text-ink-500 uppercase mb-3">回测区间</p>
-                <div className="flex items-center gap-2 text-sm text-ink-600">
+              <div className="pt-4 border-t border-slate-700">
+                <p className="editorial-label mb-4">回测区间</p>
+                <div className="flex items-center gap-2 text-sm text-slate-600">
                   <Calendar size={14} />
                   <span>
                     {data.start_date} 至 {data.end_date}
                   </span>
                 </div>
-                <p className="text-xs text-ink-400 mt-2">
+                <p className="text-xs text-slate-400 mt-2">
                   共 {data.periods} 个调仓周期，Top {data.top_n} 等权
                   {data.frequency && <span className="ml-2">· 频率: {data.frequency}</span>}
-                  {data.end_date !== data.start_date && (
-                    <span className="ml-2">· 实际可用数据至 {data.end_date}</span>
-                  )}
                 </p>
               </div>
-            </div>
+            </DissolveCard>
           </motion.div>
 
-          <motion.div variants={itemVariants} className="glass-card rounded-2xl overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="elegant-table">
-                <thead>
-                  <tr className="bg-white/40">
-                    <th className="px-6 py-4 text-left">调仓日</th>
-                    <th className="px-6 py-4 text-right">策略收益</th>
-                    <th className="px-6 py-4 text-right">随机收益</th>
-                    <th className="px-6 py-4 text-right">沪深300</th>
-                    <th className="px-6 py-4 text-right">有效标的</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.records.map((r) => (
-                    <tr key={r.start_date} className="group">
-                      <td className="px-6 py-4 font-mono text-sm text-ink-600">
-                        {r.start_date} → {r.end_date}
-                      </td>
-                      <td
-                        className={`px-6 py-4 text-right font-mono text-sm ${
-                          r.strategy_return >= 0 ? 'text-moss' : 'text-rose-600'
-                        }`}
-                      >
-                        {r.strategy_return > 0 ? '+' : ''}
-                        {r.strategy_return}%
-                      </td>
-                      <td
-                        className={`px-6 py-4 text-right font-mono text-sm ${
-                          r.random_return >= 0 ? 'text-moss' : 'text-rose-600'
-                        }`}
-                      >
-                        {r.random_return > 0 ? '+' : ''}
-                        {r.random_return}%
-                      </td>
-                      <td
-                        className={`px-6 py-4 text-right font-mono text-sm ${
-                          r.benchmark_return >= 0 ? 'text-moss' : 'text-rose-600'
-                        }`}
-                      >
-                        {r.benchmark_return > 0 ? '+' : ''}
-                        {r.benchmark_return}%
-                      </td>
-                      <td className="px-6 py-4 text-right font-mono text-sm text-ink-500">
-                        {r.valid_stocks} / {r.valid_stocks + r.missing_stocks}
-                      </td>
+          <motion.div variants={itemVariants}>
+            <DissolveCard className="liquid-glass overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="elegant-table">
+                  <thead>
+                    <tr className="bg-slate-800/30">
+                      <th className="px-6 py-4 text-left">调仓日</th>
+                      <th className="px-6 py-4 text-right">策略收益</th>
+                      <th className="px-6 py-4 text-right">随机收益</th>
+                      <th className="px-6 py-4 text-right">沪深300</th>
+                      <th className="px-6 py-4 text-right">有效标的</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {data.records.map((r) => (
+                      <tr key={r.start_date} className="group">
+                        <td className="px-6 py-4 font-mono text-sm text-slate-600">
+                          {r.start_date} → {r.end_date}
+                        </td>
+                        <td
+                          className={`px-6 py-4 text-right font-mono text-sm ${
+                            r.strategy_return >= 0 ? 'text-cyan-300' : 'text-fuchsia-300'
+                          }`}
+                        >
+                          {r.strategy_return > 0 ? '+' : ''}
+                          {r.strategy_return}%
+                        </td>
+                        <td
+                          className={`px-6 py-4 text-right font-mono text-sm ${
+                            r.random_return >= 0 ? 'text-cyan-300' : 'text-fuchsia-300'
+                          }`}
+                        >
+                          {r.random_return > 0 ? '+' : ''}
+                          {r.random_return}%
+                        </td>
+                        <td
+                          className={`px-6 py-4 text-right font-mono text-sm ${
+                            r.benchmark_return >= 0 ? 'text-cyan-300' : 'text-fuchsia-300'
+                          }`}
+                        >
+                          {r.benchmark_return > 0 ? '+' : ''}
+                          {r.benchmark_return}%
+                        </td>
+                        <td className="px-6 py-4 text-right font-mono text-sm text-slate-500">
+                          {r.valid_stocks} / {r.valid_stocks + r.missing_stocks}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </DissolveCard>
           </motion.div>
         </>
       ) : null}
