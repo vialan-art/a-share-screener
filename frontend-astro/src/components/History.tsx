@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion'
 import { useEffect, useMemo, useState } from 'react'
 import { fetchSnapshotDates, fetchSnapshotByDate } from '../services/api'
-import { Calendar, ChevronLeft, ChevronRight, ArrowUpRight, ArrowDownRight, Minus } from 'lucide-react'
+import { Calendar, ChevronLeft, ChevronRight, ArrowUpRight, ArrowDownRight, Minus, GitCompareArrows } from 'lucide-react'
 import DissolveCard from '../components/DissolveCard'
 
 const containerVariants = {
@@ -31,6 +31,9 @@ export default function History() {
   const [selectedDate, setSelectedDate] = useState('')
   const [items, setItems] = useState<any[]>([])
   const [prevItems, setPrevItems] = useState<any[]>([])
+  const [compareMode, setCompareMode] = useState(false)
+  const [compareDate, setCompareDate] = useState('')
+  const [compareItems, setCompareItems] = useState<any[]>([])
 
   useEffect(() => {
     fetchSnapshotDates().then((d) => {
@@ -53,6 +56,14 @@ export default function History() {
     }
   }, [selectedDate, dates])
 
+  useEffect(() => {
+    if (compareDate) {
+      fetchSnapshotByDate(compareDate).then((data) => setCompareItems(data.items || []))
+    } else {
+      setCompareItems([])
+    }
+  }, [compareDate])
+
   const currentIndex = dates.indexOf(selectedDate)
 
   const prevTop10Symbols = useMemo(
@@ -60,12 +71,24 @@ export default function History() {
     [prevItems]
   )
 
-  const currentTop10Symbols = useMemo(
-    () => new Set(items.slice(0, 10).map((i: any) => i.symbol)),
-    [items]
-  )
+  const compareTop10Map = useMemo(() => {
+    const map: Record<string, number> = {}
+    compareItems.slice(0, 10).forEach((item: any, idx: number) => {
+      map[item.symbol] = idx + 1
+    })
+    return map
+  }, [compareItems])
 
   function getChangeTag(item: any, index: number) {
+    if (compareMode && compareItems.length > 0) {
+      if (index >= 10) return null
+      const compareRank = compareTop10Map[item.symbol]
+      if (compareRank === undefined) return { label: '新进', color: 'text-cyan-300 bg-cyan-400/10 border-cyan-400/20', icon: ArrowUpRight }
+      const diff = compareRank - (index + 1)
+      if (diff > 0) return { label: `+${diff}`, color: 'text-cyan-300 bg-cyan-400/10 border-cyan-400/20', icon: ArrowUpRight }
+      if (diff < 0) return { label: `${diff}`, color: 'text-fuchsia-300 bg-fuchsia-400/10 border-fuchsia-400/20', icon: ArrowDownRight }
+      return null
+    }
     if (prevItems.length === 0) return null
     const inCurrentTop10 = index < 10
     const inPrevTop10 = prevTop10Symbols.has(item.symbol)
@@ -84,7 +107,35 @@ export default function History() {
       <motion.div variants={itemVariants} className="flex flex-col lg:flex-row lg:items-end justify-between gap-6">
         <SectionHeader number="02" label="History" title="历史存档" />
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          <button
+            onClick={() => {
+              setCompareMode(!compareMode)
+              if (compareMode) setCompareDate('')
+            }}
+            className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs border transition-colors ${
+              compareMode
+                ? 'border-cyan-400/30 text-cyan-300 bg-cyan-400/5'
+                : 'border-slate-700 text-slate-500 hover:text-slate-300'
+            }`}
+          >
+            <GitCompareArrows size={12} />
+            {compareMode ? '退出对比' : '对比模式'}
+          </button>
+
+          {compareMode && (
+            <select
+              value={compareDate}
+              onChange={(e) => setCompareDate(e.target.value)}
+              className="glass-select min-w-[120px] text-sm"
+            >
+              <option value="">选择对比日期</option>
+              {dates.filter((d) => d !== selectedDate).map((d) => (
+                <option key={d} value={d}>{d}</option>
+              ))}
+            </select>
+          )}
+
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}

@@ -1,8 +1,9 @@
 import { motion } from 'framer-motion'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import { fetchLatestSnapshot } from '../services/api'
-import { Search, SlidersHorizontal, ArrowUpDown, X, RotateCcw } from 'lucide-react'
+import { Search, SlidersHorizontal, ArrowUpDown, X, RotateCcw, ArrowUp, ArrowDown } from 'lucide-react'
 import DissolveCard from '../components/DissolveCard'
+import { SignalBadges, formatSignalName } from '../components/SignalBadges'
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -49,59 +50,6 @@ function ReasonPill({ reasons }: { reasons?: string[] }) {
   )
 }
 
-function SignalBadges({ signals }: { signals?: Record<string, any> }) {
-  if (!signals) return <span className="text-slate-700 text-xs">—</span>
-  const passed = Object.values(signals).filter((s: any) => s.passed === true)
-  if (passed.length === 0) return <span className="text-slate-700 text-xs">—</span>
-  return (
-    <div className="flex flex-wrap gap-1">
-      {passed.slice(0, 3).map((s: any) => (
-        <span
-          key={s.name}
-          title={s.reason || s.name}
-          className="text-[9px] px-1.5 py-0.5 rounded bg-cyan-400/10 text-cyan-300 border border-cyan-400/20 whitespace-nowrap"
-        >
-          {formatSignalName(s.name)}
-        </span>
-      ))}
-      {passed.length > 3 && (
-        <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">
-          +{passed.length - 3}
-        </span>
-      )}
-    </div>
-  )
-}
-
-function formatSignalName(name: string): string {
-  const map: Record<string, string> = {
-    macd_golden_cross: 'MACD金叉',
-    kdj: 'KDJ',
-    rsi_14: 'RSI',
-    bollinger: '布林',
-    ma_bullish_alignment: '均线多头',
-    atr_14: 'ATR',
-    hammer: '锤子线',
-    engulfing: '吞没',
-    doji: '十字星',
-    morning_star: '启明星',
-    volume_breakout: '放量突破',
-    platform_breakout: '平台突破',
-    turtle_breakout_20: '海龟20日',
-    low_atr_growth: '低波动',
-    pullback_yearly_ma: '年线回踩',
-    rps_breakout_120: 'RPS120',
-    limit_up_shakeout: '涨停洗盘',
-    uptrend_limit_down: '趋势跌停',
-    high_tight_flag: '高位旗形',
-    ma_volume_golden_cross: '量价金叉',
-    turtle_trade_enhanced: '海龟增强',
-    stock_scanner_fundamental: '基本面',
-    stock_scanner_sentiment: '情绪面',
-  }
-  return map[name] || name
-}
-
 function parseSignals(dataJson: string | null): Record<string, any> | null {
   if (!dataJson) return null
   try {
@@ -122,7 +70,7 @@ function loadFilters() {
   return null
 }
 
-function saveFilters(filters: { minScore: string; industry: string; sortBy: string; search: string }) {
+function saveFilters(filters: { minScore: string; industry: string; sortBy: string; sortDir: string; search: string }) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(filters))
   } catch {}
@@ -136,16 +84,34 @@ export default function Screener() {
   const [minScore, setMinScore] = useState(saved?.minScore || '')
   const [industry, setIndustry] = useState(saved?.industry || '')
   const [sortBy, setSortBy] = useState(saved?.sortBy || 'total_score')
+  const [sortDir, setSortDir] = useState<'desc' | 'asc'>(saved?.sortDir || 'desc')
   const [search, setSearch] = useState(saved?.search || '')
   const [loading, setLoading] = useState(true)
+  const searchRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     loadItems()
   }, [])
 
   useEffect(() => {
-    saveFilters({ minScore, industry, sortBy, search })
-  }, [minScore, industry, sortBy, search])
+    saveFilters({ minScore, industry, sortBy, sortDir, search })
+  }, [minScore, industry, sortBy, sortDir, search])
+
+  // 快捷键: / 聚焦搜索, Esc 清除
+  useEffect(() => {
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === '/' && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'SELECT') {
+        e.preventDefault()
+        searchRef.current?.focus()
+      }
+      if (e.key === 'Escape' && document.activeElement === searchRef.current) {
+        setSearch('')
+        searchRef.current?.blur()
+      }
+    }
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [])
 
   async function loadItems() {
     setLoading(true)
@@ -184,9 +150,23 @@ export default function Screener() {
     return [...filteredItems].sort((a, b) => {
       const aVal = a[sortBy] ?? -Infinity
       const bVal = b[sortBy] ?? -Infinity
-      return bVal - aVal
+      return sortDir === 'desc' ? bVal - aVal : aVal - bVal
     })
-  }, [filteredItems, sortBy])
+  }, [filteredItems, sortBy, sortDir])
+
+  function toggleSort(field: string) {
+    if (sortBy === field) {
+      setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))
+    } else {
+      setSortBy(field)
+      setSortDir('desc')
+    }
+  }
+
+  function SortIcon({ field }: { field: string }) {
+    if (sortBy !== field) return <ArrowUpDown size={10} className="text-slate-700" />
+    return sortDir === 'desc' ? <ArrowDown size={10} className="text-cyan-300" /> : <ArrowUp size={10} className="text-cyan-300" />
+  }
 
   const industries = useMemo(
     () => Array.from(new Set(items.map((i) => i.industry).filter(Boolean))).sort(),
@@ -216,8 +196,9 @@ export default function Screener() {
             <div className="relative flex-1 min-w-[200px] max-w-xs">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600" />
               <input
+                ref={searchRef}
                 type="text"
-                placeholder="搜索代码或名称..."
+                placeholder="搜索代码或名称... (按 / 聚焦)"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="glass-select w-full"
@@ -337,23 +318,39 @@ export default function Screener() {
               )}
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto max-h-[70vh]">
               <table className="elegant-table">
-                <thead>
+                <thead className="sticky top-0 z-10">
                   <tr className="bg-slate-900">
-                    <th className="px-4 py-4 font-sans">排名</th>
-                    <th className="px-4 py-4 font-sans">股票</th>
-                    <th className="px-4 py-4 font-sans">行业</th>
-                    <th className="px-4 py-4 font-sans">信号</th>
-                    <th className="px-4 py-4 text-right font-sans">综合</th>
-                    <th className="px-4 py-4 text-right font-sans">质量</th>
-                    <th className="px-4 py-4 text-right font-sans">估值</th>
-                    <th className="px-4 py-4 text-right font-sans">稳定</th>
-                    <th className="px-4 py-4 text-right font-sans">动量</th>
-                    <th className="px-4 py-4 text-right font-sans">PE</th>
-                    <th className="px-4 py-4 text-right font-sans">PB</th>
-                    <th className="px-4 py-4 text-right font-sans">ROE</th>
-                    <th className="px-4 py-4 font-sans">入选理由</th>
+                    <th className="px-4 py-4 font-sans bg-slate-900">排名</th>
+                    <th className="px-4 py-4 font-sans bg-slate-900">股票</th>
+                    <th className="px-4 py-4 font-sans bg-slate-900">行业</th>
+                    <th className="px-4 py-4 font-sans bg-slate-900">信号</th>
+                    <th className="px-4 py-4 text-right font-sans bg-slate-900 cursor-pointer select-none hover:text-slate-300 transition-colors" onClick={() => toggleSort('total_score')}>
+                      <span className="inline-flex items-center gap-1 justify-end">综合 <SortIcon field="total_score" /></span>
+                    </th>
+                    <th className="px-4 py-4 text-right font-sans bg-slate-900 cursor-pointer select-none hover:text-slate-300 transition-colors" onClick={() => toggleSort('quality_score')}>
+                      <span className="inline-flex items-center gap-1 justify-end">质量 <SortIcon field="quality_score" /></span>
+                    </th>
+                    <th className="px-4 py-4 text-right font-sans bg-slate-900 cursor-pointer select-none hover:text-slate-300 transition-colors" onClick={() => toggleSort('value_score')}>
+                      <span className="inline-flex items-center gap-1 justify-end">估值 <SortIcon field="value_score" /></span>
+                    </th>
+                    <th className="px-4 py-4 text-right font-sans bg-slate-900 cursor-pointer select-none hover:text-slate-300 transition-colors" onClick={() => toggleSort('stability_score')}>
+                      <span className="inline-flex items-center gap-1 justify-end">稳定 <SortIcon field="stability_score" /></span>
+                    </th>
+                    <th className="px-4 py-4 text-right font-sans bg-slate-900 cursor-pointer select-none hover:text-slate-300 transition-colors" onClick={() => toggleSort('momentum_score')}>
+                      <span className="inline-flex items-center gap-1 justify-end">动量 <SortIcon field="momentum_score" /></span>
+                    </th>
+                    <th className="px-4 py-4 text-right font-sans bg-slate-900 cursor-pointer select-none hover:text-slate-300 transition-colors" onClick={() => toggleSort('pe_ttm')}>
+                      <span className="inline-flex items-center gap-1 justify-end">PE <SortIcon field="pe_ttm" /></span>
+                    </th>
+                    <th className="px-4 py-4 text-right font-sans bg-slate-900 cursor-pointer select-none hover:text-slate-300 transition-colors" onClick={() => toggleSort('pb')}>
+                      <span className="inline-flex items-center gap-1 justify-end">PB <SortIcon field="pb" /></span>
+                    </th>
+                    <th className="px-4 py-4 text-right font-sans bg-slate-900 cursor-pointer select-none hover:text-slate-300 transition-colors" onClick={() => toggleSort('roe')}>
+                      <span className="inline-flex items-center gap-1 justify-end">ROE <SortIcon field="roe" /></span>
+                    </th>
+                    <th className="px-4 py-4 font-sans bg-slate-900">入选理由</th>
                   </tr>
                 </thead>
                 <tbody>

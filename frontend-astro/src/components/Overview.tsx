@@ -37,6 +37,7 @@ import {
 } from 'recharts'
 import DissolveCard from '../components/DissolveCard'
 import { SkeletonStats, SkeletonTable } from '../components/Skeleton'
+import { SignalBadges } from '../components/SignalBadges'
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -459,6 +460,7 @@ export default function Overview() {
                         <span className="text-[10px] tracking-wide px-2 py-0.5 rounded-md bg-slate-800 text-slate-400 border border-slate-700">
                           {item.industry || '未分类'}
                         </span>
+                        <SignalBadges signals={item._signals} max={2} />
                       </div>
                       <div className="mt-3">
                         <ScoreBar label="综合" value={item.total_score} />

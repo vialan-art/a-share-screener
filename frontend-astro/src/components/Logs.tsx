@@ -34,10 +34,26 @@ function StatusIcon({ status }: { status: string }) {
 
 export default function Logs() {
   const [logs, setLogs] = useState<any[]>([])
+  const [autoRefresh, setAutoRefresh] = useState(true)
+  const [lastRefresh, setLastRefresh] = useState<Date>(new Date())
 
   useEffect(() => {
-    fetchLogs().then(setLogs)
+    fetchLogs().then((data) => {
+      setLogs(data)
+      setLastRefresh(new Date())
+    })
   }, [])
+
+  useEffect(() => {
+    if (!autoRefresh) return
+    const interval = setInterval(() => {
+      fetchLogs().then((data) => {
+        setLogs(data)
+        setLastRefresh(new Date())
+      })
+    }, 5000)
+    return () => clearInterval(interval)
+  }, [autoRefresh])
 
   return (
     <motion.div
@@ -46,8 +62,23 @@ export default function Logs() {
       animate="visible"
       className="space-y-8 pb-12"
     >
-      <motion.div variants={itemVariants}>
+      <motion.div variants={itemVariants} className="flex items-end justify-between">
         <SectionHeader number="02" label="Logs" title="运行日志" />
+        <div className="flex items-center gap-3 mb-6">
+          <span className="text-[10px] text-slate-600">
+            {autoRefresh ? '每 5s 自动刷新' : '已暂停'} · 上次 {lastRefresh.toLocaleTimeString('zh-CN')}
+          </span>
+          <button
+            onClick={() => setAutoRefresh(!autoRefresh)}
+            className={`text-[10px] px-3 py-1.5 rounded-lg border transition-colors ${
+              autoRefresh
+                ? 'border-cyan-400/30 text-cyan-300 bg-cyan-400/5'
+                : 'border-slate-700 text-slate-500 hover:text-slate-300'
+            }`}
+          >
+            {autoRefresh ? '自动刷新 ON' : '自动刷新 OFF'}
+          </button>
+        </div>
       </motion.div>
 
       <motion.div variants={itemVariants}>

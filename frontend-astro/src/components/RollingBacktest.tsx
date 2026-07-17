@@ -108,10 +108,17 @@ export default function RollingBacktest() {
   const [loading, setLoading] = useState(false)
   const [topN, setTopN] = useState(20)
   const [frequency, setFrequency] = useState('daily')
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('')
 
   async function load() {
     setLoading(true)
-    const res = await fetchRollingBacktest({ top_n: topN, frequency })
+    const res = await fetchRollingBacktest({
+      top_n: topN,
+      frequency,
+      start_date: startDate || undefined,
+      end_date: endDate || undefined,
+    })
     setData(res)
     setLoading(false)
   }
@@ -173,6 +180,21 @@ export default function RollingBacktest() {
               <option value="daily">日度</option>
             </select>
           </div>
+          <input
+            type="date"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+            className="glass-select w-36 text-sm"
+            placeholder="开始日期"
+          />
+          <span className="text-slate-600 text-xs">至</span>
+          <input
+            type="date"
+            value={endDate}
+            onChange={(e) => setEndDate(e.target.value)}
+            className="glass-select w-36 text-sm"
+            placeholder="结束日期"
+          />
           <motion.button
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}

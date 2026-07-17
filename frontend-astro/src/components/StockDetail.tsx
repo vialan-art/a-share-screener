@@ -17,7 +17,8 @@ import {
   AreaChart,
   Area,
 } from 'recharts'
-import { ArrowLeft, AlertTriangle, CheckCircle2, Database, Clock, ShieldAlert, TrendingUp } from 'lucide-react'
+import { ArrowLeft, AlertTriangle, CheckCircle2, Database, Clock, ShieldAlert, TrendingUp, Zap, XCircle } from 'lucide-react'
+import { formatSignalName } from '../components/SignalBadges'
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -47,6 +48,57 @@ function MetricCard({ label, value, unit = '' }: { label: string; value: any; un
         )}
       </p>
     </div>
+  )
+}
+
+function SignalPanel({ signals }: { signals: Record<string, any> | null }) {
+  if (!signals || Object.keys(signals).length === 0) return null
+  const entries = Object.entries(signals)
+  const passed = entries.filter(([, s]: [string, any]) => s.passed === true)
+  const failed = entries.filter(([, s]: [string, any]) => s.passed === false)
+
+  return (
+    <motion.div variants={itemVariants} className="glass-card rounded-2xl p-6">
+      <div className="flex items-center gap-3 mb-6">
+        <div className="w-10 h-10 rounded-full bg-slate-800/60 flex items-center justify-center">
+          <Zap size={18} className="text-cyan-300" />
+        </div>
+        <div>
+          <p className="text-[10px] tracking-[0.2em] text-slate-500 uppercase">Plugin Signals</p>
+          <p className="text-xs text-slate-500">{passed.length} passed / {entries.length} total</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+        {entries.map(([name, s]: [string, any]) => (
+          <div
+            key={name}
+            className={`rounded-xl p-3 border ${
+              s.passed
+                ? 'bg-cyan-400/5 border-cyan-400/20'
+                : 'bg-slate-900/40 border-slate-800'
+            }`}
+          >
+            <div className="flex items-center justify-between mb-1">
+              <span className={`text-xs font-medium ${s.passed ? 'text-cyan-300' : 'text-slate-500'}`}>
+                {formatSignalName(name)}
+              </span>
+              {s.passed ? (
+                <CheckCircle2 size={12} className="text-cyan-300" />
+              ) : (
+                <XCircle size={12} className="text-slate-700" />
+              )}
+            </div>
+            {s.reason && (
+              <p className="text-[10px] text-slate-500 leading-relaxed">{s.reason}</p>
+            )}
+            {s.score !== null && s.score !== undefined && (
+              <p className="text-[10px] font-mono text-slate-600 mt-1">score: {typeof s.score === 'number' ? s.score.toFixed(2) : s.score}</p>
+            )}
+          </div>
+        ))}
+      </div>
+    </motion.div>
   )
 }
 
@@ -295,6 +347,12 @@ export default function StockDetail() {
       <motion.div variants={itemVariants} className="lg:col-span-3">
         <QualityBanner quality={dataQuality} />
       </motion.div>
+
+      {data?.signals && (
+        <motion.div variants={itemVariants} className="lg:col-span-3">
+          <SignalPanel signals={data.signals} />
+        </motion.div>
+      )}
       </div>
 
       {!score.passed_filters && score.filter_reasons && score.filter_reasons !== '[]' && (

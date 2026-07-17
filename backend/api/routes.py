@@ -268,6 +268,15 @@ def get_stock_detail(symbol: str, db: Session = Depends(get_db)):
     metrics = db.query(FinancialMetric).filter(FinancialMetric.symbol == symbol).first()
     latest_score = db.query(StockScore).filter(StockScore.symbol == symbol).order_by(StockScore.score_date.desc()).first()
 
+    # 从最新快照补充插件信号
+    latest_snap = (
+        db.query(DailySnapshot)
+        .filter(DailySnapshot.symbol == symbol)
+        .order_by(DailySnapshot.snapshot_date.desc())
+        .first()
+    )
+    signals = _extract_signals(latest_snap.data_json if latest_snap else None)
+
     def m(field):
         return getattr(metrics, field, None) if metrics else None
 
@@ -323,6 +332,7 @@ def get_stock_detail(symbol: str, db: Session = Depends(get_db)):
             "passed_filters": latest_score.passed_filters if latest_score else None,
             "filter_reasons": latest_score.filter_reasons if latest_score else None,
         },
+        "signals": signals,
     }
 
 
