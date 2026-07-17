@@ -498,6 +498,16 @@ def get_latest_portfolio(top_n: int = 20, db: Session = Depends(get_db)):
     metrics_map = {}
     for m in db.query(FinancialMetric).filter(FinancialMetric.symbol.in_([i.symbol for i in items])).all():
         metrics_map[m.symbol] = m
+
+    def _extract_price(data_json: Optional[str], field: str):
+        if not data_json:
+            return None
+        try:
+            d = json.loads(data_json)
+            return d.get(field)
+        except Exception:
+            return None
+
     return {
         "date": latest.portfolio_date,
         "items": [
@@ -507,8 +517,8 @@ def get_latest_portfolio(top_n: int = 20, db: Session = Depends(get_db)):
                 "industry": i.industry,
                 "total_score": i.total_score,
                 "weight": i.weight,
-                "change_pct": getattr(metrics_map.get(i.symbol), "change_pct", None),
-                "latest_price": getattr(metrics_map.get(i.symbol), "latest_price", None),
+                "change_pct": _extract_price(i.data_json, "change_pct") or getattr(metrics_map.get(i.symbol), "change_pct", None),
+                "latest_price": _extract_price(i.data_json, "latest_price") or getattr(metrics_map.get(i.symbol), "latest_price", None),
             }
             for i in items
         ],

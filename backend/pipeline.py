@@ -312,7 +312,7 @@ class ScreenerPipeline:
             stage_start = datetime.utcnow()
             _progress("[实盘] 保存推荐组合...")
             print("[实盘] 保存推荐组合...")
-            self._save_portfolio(db, snapshot_date, score_results, stocks)
+            self._save_portfolio(db, snapshot_date, score_results, stocks, metrics_map)
             stats["stage_times"]["portfolio"] = (datetime.utcnow() - stage_start).total_seconds()
 
             total_time = (datetime.utcnow() - start_time).total_seconds()
@@ -350,9 +350,8 @@ class ScreenerPipeline:
             db.commit()
             raise
 
-    def _save_portfolio(self, db: Session, snapshot_date: str, score_results, stocks: List[Dict[str, Any]], top_n: int = 20):
+    def _save_portfolio(self, db: Session, snapshot_date: str, score_results, stocks: List[Dict[str, Any]], metrics_map: Dict[str, Dict[str, Any]] = None, top_n: int = 20):
         """保存当日 Top N 推荐组合为实盘跟踪组合。"""
-        # 只保留前 top_n
         top = score_results[:top_n]
         if not top:
             return
@@ -363,6 +362,13 @@ class ScreenerPipeline:
         weight = round(1.0 / len(top), 6)
         for sr in top:
             stock = next((s for s in stocks if s["symbol"] == sr.symbol), {})
+            # 从 metrics_map 补充行情数据
+            metrics = (metrics_map or {}).get(sr.symbol, {})
+            data = {"score_details": sr.details}
+            for field in ["latest_price", "change_pct", "turnover", "pe_ttm", "pb", "ps_ttm"]:
+                v = metrics.get(field)
+                if v is not None:
+                    data[field] = v
             db.add(Portfolio(
                 portfolio_date=snapshot_date,
                 symbol=sr.symbol,
@@ -370,6 +376,6 @@ class ScreenerPipeline:
                 industry=stock.get("industry", ""),
                 total_score=sr.total_score,
                 weight=weight,
-                data_json=json.dumps({"score_details": sr.details}, ensure_ascii=False),
+                data_json=json.dumps(data, ensure_ascii=False, default=str),
             ))
         db.commit()
