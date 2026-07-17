@@ -776,10 +776,18 @@ class AkShareProvider:
     def get_daily_prices(self, symbols: List[str]) -> List[Dict[str, Any]]:
         """获取日线行情（用于计算动量和估值）。
 
-        优先使用东方财富 spot（字段全）；失败/字段缺失时回退新浪 spot。
-        为避免覆盖 get_financial_metrics 已计算出的 PE/PB 等字段，结果中值为 None 的键会被剔除。
+        优先用 BaoStock（免费稳定，含 PE/PB/PS/turnover）；
+        失败时回退 AkShare EM/Sina spot。
         """
         now = datetime.utcnow()
+
+        # 方案 1：BaoStock（最稳定，字段全）
+        try:
+            return self._get_prices_via_baostock(symbols, now)
+        except Exception as e:
+            print(f"[AkShareProvider] BaoStock 行情失败，回退 AkShare spot: {e}")
+
+        # 方案 2：AkShare EM/Sina spot（备选）
         df = self._get_cached_spot()
         source = getattr(self, "_spot_source", "em")
 
@@ -816,7 +824,6 @@ class AkShareProvider:
             })
             df["symbol"] = df["symbol"].astype(str).str.strip().str.zfill(6)
 
-        # 只保留需要的列，缺失的列填充 None
         needed_cols = ["symbol", "latest_price", "change_pct", "turnover", "pe_ttm", "pb", "ps_ttm", "dividend_yield"]
         for col in needed_cols:
             if col not in df.columns:
@@ -829,7 +836,6 @@ class AkShareProvider:
             symbol = str(r["symbol"]).strip()
             if symbol not in symbol_set or len(symbol) != 6:
                 continue
-            # 仅保留非 None 字段，避免覆盖财务指标中已计算的值
             item = {
                 "symbol": symbol,
                 "data_source": self.name,
@@ -842,6 +848,59 @@ class AkShareProvider:
             result.append(item)
 
         return result
+
+    def _get_prices_via_baostock(self, symbols: List[str], now: datetime) -> List[Dict[str, Any]]:
+        """用 BaoStock 获取最新行情（含 PE/PB/PS/turnover）。
+
+        逐只查询最新一个交易日的估值数据。500 只约需 50-100s，可接受。
+        """
+        import baostock as bs
+        lg = bs.login()
+        if lg.error_code != "0":
+            raise RuntimeError(f"BaoStock login failed: {lg.error_msg}")
+
+        try:
+            today = datetime.now().strftime("%Y-%m-%d")
+            week_ago = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+            result = []
+            for i, sym in enumerate(symbols):
+                bs_sym = f"sh.{sym}" if sym.startswith("6") else f"sz.{sym}"
+                try:
+                    rs = bs.query_history_k_data_plus(
+                        bs_sym,
+                        "date,close,peTTM,pbMRQ,psTTM,turn,pctChg",
+                        start_date=week_ago,
+                        end_date=today,
+                        frequency="d",
+                        adjustflag="2",
+                    )
+                    if rs.error_code != "0":
+                        continue
+                    rows = []
+                    while rs.next():
+                        rows.append(rs.get_row_data())
+                    if not rows:
+                        continue
+                    latest = rows[-1]
+                    item = {
+                        "symbol": sym,
+                        "data_source": "baostock",
+                        "data_freshness": now,
+                    }
+                    if len(latest) >= 7:
+                        for col, val in [("latest_price", latest[1]), ("pe_ttm", latest[2]), ("pb", latest[3]), ("ps_ttm", latest[4]), ("turnover", latest[5]), ("change_pct", latest[6])]:
+                            v = self._to_float(val)
+                            if v is not None:
+                                item[col] = v
+                    if len(item) > 4:
+                        result.append(item)
+                except Exception:
+                    continue
+                if (i + 1) % 100 == 0:
+                    print(f"[BaoStock] 行情进度 {i + 1}/{len(symbols)}")
+            return result
+        finally:
+            bs.logout()
 
     @staticmethod
     def _to_float(value, scale: float = 1.0) -> Optional[float]:
