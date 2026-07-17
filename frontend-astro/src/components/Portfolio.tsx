@@ -39,6 +39,8 @@ interface PortfolioItem {
   industry: string
   total_score: number
   weight: number
+  change_pct?: number | null
+  latest_price?: number | null
 }
 
 interface NavRecord {
@@ -166,6 +168,8 @@ export default function Portfolio() {
                   <th className="px-6 py-4 text-left">排名</th>
                   <th className="px-6 py-4 text-left">股票</th>
                   <th className="px-6 py-4 text-left">行业</th>
+                  <th className="px-6 py-4 text-right">最新价</th>
+                  <th className="px-6 py-4 text-right">今日涨跌</th>
                   <th className="px-6 py-4 text-right">综合得分</th>
                   <th className="px-6 py-4 text-right">权重</th>
                 </tr>
@@ -193,6 +197,18 @@ export default function Portfolio() {
                       <span className="text-[10px] tracking-wide px-2.5 py-1 rounded-full glass-float text-slate-600 whitespace-nowrap">
                         {item.industry || '未分类'}
                       </span>
+                    </td>
+                    <td className="px-6 py-4 text-right font-mono text-sm text-slate-600">
+                      {item.latest_price ? `¥${item.latest_price.toFixed(2)}` : '—'}
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      {item.change_pct !== null && item.change_pct !== undefined ? (
+                        <span className={`font-mono text-sm font-medium ${item.change_pct >= 0 ? 'text-cyan-300' : 'text-fuchsia-300'}`}>
+                          {item.change_pct >= 0 ? '+' : ''}{item.change_pct.toFixed(2)}%
+                        </span>
+                      ) : (
+                        <span className="text-slate-700 text-xs">—</span>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-right font-mono text-sm text-slate-600">
                       {item.total_score.toFixed(3)}

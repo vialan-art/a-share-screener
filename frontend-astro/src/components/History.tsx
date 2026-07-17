@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { fetchSnapshotDates, fetchSnapshotByDate } from '../services/api'
-import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Calendar, ChevronLeft, ChevronRight, ArrowUpRight, ArrowDownRight, Minus } from 'lucide-react'
 import DissolveCard from '../components/DissolveCard'
 
 const containerVariants = {
@@ -30,6 +30,7 @@ export default function History() {
   const [dates, setDates] = useState<string[]>([])
   const [selectedDate, setSelectedDate] = useState('')
   const [items, setItems] = useState<any[]>([])
+  const [prevItems, setPrevItems] = useState<any[]>([])
 
   useEffect(() => {
     fetchSnapshotDates().then((d) => {
@@ -43,10 +44,35 @@ export default function History() {
   useEffect(() => {
     if (selectedDate) {
       fetchSnapshotByDate(selectedDate).then((data) => setItems(data.items || []))
+      const idx = dates.indexOf(selectedDate)
+      if (idx >= 0 && idx < dates.length - 1) {
+        fetchSnapshotByDate(dates[idx + 1]).then((data) => setPrevItems(data.items || []))
+      } else {
+        setPrevItems([])
+      }
     }
-  }, [selectedDate])
+  }, [selectedDate, dates])
 
   const currentIndex = dates.indexOf(selectedDate)
+
+  const prevTop10Symbols = useMemo(
+    () => new Set(prevItems.slice(0, 10).map((i: any) => i.symbol)),
+    [prevItems]
+  )
+
+  const currentTop10Symbols = useMemo(
+    () => new Set(items.slice(0, 10).map((i: any) => i.symbol)),
+    [items]
+  )
+
+  function getChangeTag(item: any, index: number) {
+    if (prevItems.length === 0) return null
+    const inCurrentTop10 = index < 10
+    const inPrevTop10 = prevTop10Symbols.has(item.symbol)
+    if (inCurrentTop10 && !inPrevTop10) return { label: '新进', color: 'text-cyan-300 bg-cyan-400/10 border-cyan-400/20', icon: ArrowUpRight }
+    if (!inCurrentTop10 && inPrevTop10) return { label: '掉出', color: 'text-fuchsia-300 bg-fuchsia-400/10 border-fuchsia-400/20', icon: ArrowDownRight }
+    return null
+  }
 
   return (
     <motion.div
@@ -114,6 +140,7 @@ export default function History() {
                   <th className="px-6 py-4">代码</th>
                   <th className="px-6 py-4">名称</th>
                   <th className="px-6 py-4">行业</th>
+                  <th className="px-6 py-4">变动</th>
                   <th className="px-6 py-4 text-right">综合得分</th>
                   <th className="px-6 py-4 text-right">PE</th>
                   <th className="px-6 py-4 text-right">PB</th>
@@ -121,28 +148,42 @@ export default function History() {
                 </tr>
               </thead>
               <tbody>
-                {items.map((item, index) => (
-                  <tr key={item.symbol} className="group">
-                    <td className="px-6 py-4">
-                      <span className="font-display text-xl text-slate-200 italic">
-                        {String(index + 1).padStart(2, '0')}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 font-mono text-sm text-slate-600">{item.symbol}</td>
-                    <td className="px-6 py-4 font-medium text-slate-50">{item.name}</td>
-                    <td className="px-6 py-4">
-                      <span className="text-[10px] tracking-wide px-2.5 py-1 rounded-full glass-float text-slate-600">
-                        {item.industry || '未分类'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-right font-display text-xl text-cyan-300">
-                      {item.total_score.toFixed(3)}
-                    </td>
-                    <td className="px-6 py-4 text-right font-mono text-sm text-slate-600">{item.pe_ttm?.toFixed(2) || '-'}</td>
-                    <td className="px-6 py-4 text-right font-mono text-sm text-slate-600">{item.pb?.toFixed(2) || '-'}</td>
-                    <td className="px-6 py-4 text-right font-mono text-sm text-slate-600">{item.roe?.toFixed(2) || '-'}%</td>
-                  </tr>
-                ))}
+                {items.map((item, index) => {
+                  const tag = getChangeTag(item, index)
+                  const TagIcon = tag?.icon || Minus
+                  return (
+                    <tr key={item.symbol} className="group">
+                      <td className="px-6 py-4">
+                        <span className="font-display text-xl text-slate-200 italic">
+                          {String(index + 1).padStart(2, '0')}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 font-mono text-sm text-slate-600">{item.symbol}</td>
+                      <td className="px-6 py-4 font-medium text-slate-50">{item.name}</td>
+                      <td className="px-6 py-4">
+                        <span className="text-[10px] tracking-wide px-2.5 py-1 rounded-full glass-float text-slate-600">
+                          {item.industry || '未分类'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        {tag ? (
+                          <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-md border ${tag.color}`}>
+                            <TagIcon size={10} />
+                            {tag.label}
+                          </span>
+                        ) : (
+                          <span className="text-slate-700 text-xs">—</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 text-right font-display text-xl text-cyan-300">
+                        {item.total_score.toFixed(3)}
+                      </td>
+                      <td className="px-6 py-4 text-right font-mono text-sm text-slate-600">{item.pe_ttm?.toFixed(2) || '-'}</td>
+                      <td className="px-6 py-4 text-right font-mono text-sm text-slate-600">{item.pb?.toFixed(2) || '-'}</td>
+                      <td className="px-6 py-4 text-right font-mono text-sm text-slate-600">{item.roe?.toFixed(2) || '-'}%</td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>

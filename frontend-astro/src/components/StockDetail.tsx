@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion'
 import { useEffect, useState, useMemo } from 'react'
-import { fetchStockDetail } from '../services/api'
+import { fetchStockDetail, fetchStockPrices } from '../services/api'
 import {
   Radar,
   RadarChart,
@@ -8,8 +8,16 @@ import {
   PolarAngleAxis,
   PolarRadiusAxis,
   ResponsiveContainer,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  AreaChart,
+  Area,
 } from 'recharts'
-import { ArrowLeft, AlertTriangle, CheckCircle2, Database, Clock, ShieldAlert } from 'lucide-react'
+import { ArrowLeft, AlertTriangle, CheckCircle2, Database, Clock, ShieldAlert, TrendingUp } from 'lucide-react'
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -99,6 +107,7 @@ function QualityBanner({ quality }: { quality: any }) {
 export default function StockDetail() {
   const [data, setData] = useState<any>(null)
   const [symbol, setSymbol] = useState<string>('')
+  const [prices, setPrices] = useState<any[]>([])
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -106,6 +115,7 @@ export default function StockDetail() {
     setSymbol(s)
     if (s) {
       fetchStockDetail(s).then(setData)
+      fetchStockPrices(s, 60).then((d) => setPrices(d.prices || []))
     }
   }, [])
 
@@ -123,6 +133,13 @@ export default function StockDetail() {
       { subject: '成长', A: Math.min(Math.max((metrics.profit_deducted_growth || metrics.profit_growth || 0) + 50, 0), 100), fullMark: 100 },
     ]
   }, [data, score, metrics])
+
+  const priceChartData = useMemo(() => {
+    return prices.map((p) => ({
+      date: p.date,
+      收盘价: p.close,
+    }))
+  }, [prices])
 
   if (!data) {
     return (
@@ -186,6 +203,45 @@ export default function StockDetail() {
           </div>
         </div>
       </motion.div>
+
+      {priceChartData.length > 2 && (
+        <motion.div variants={itemVariants} className="glass-card rounded-2xl p-6">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-10 h-10 rounded-full bg-slate-800/60 flex items-center justify-center">
+              <TrendingUp size={18} className="text-cyan-300" />
+            </div>
+            <div>
+              <p className="text-[10px] tracking-[0.2em] text-slate-500 uppercase">Price Trend</p>
+              <p className="text-xs text-slate-500">近 {priceChartData.length} 个交易日（后复权）</p>
+            </div>
+          </div>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={priceChartData} margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
+                <defs>
+                  <linearGradient id="priceGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#38bdf8" stopOpacity={0.3} />
+                    <stop offset="100%" stopColor="#38bdf8" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.08)" />
+                <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#64748b' }} stroke="#475569" />
+                <YAxis tick={{ fontSize: 10, fill: '#64748b' }} stroke="#475569" domain={['auto', 'auto']} />
+                <Tooltip
+                  contentStyle={{
+                    borderRadius: '12px',
+                    border: '1px solid rgba(148,163,184,0.2)',
+                    background: 'rgba(8,12,20,0.92)',
+                    backdropFilter: 'blur(12px)',
+                    color: '#f0f4f8',
+                  }}
+                />
+                <Area type="monotone" dataKey="收盘价" stroke="#38bdf8" strokeWidth={2} fill="url(#priceGradient)" dot={false} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </motion.div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <motion.div variants={itemVariants} className="glass-card rounded-2xl p-6">

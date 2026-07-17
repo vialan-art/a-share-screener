@@ -32,8 +32,11 @@ import {
   Tooltip,
   ResponsiveContainer,
   Cell,
+  LineChart,
+  Line,
 } from 'recharts'
 import DissolveCard from '../components/DissolveCard'
+import { SkeletonStats, SkeletonTable } from '../components/Skeleton'
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -115,6 +118,15 @@ function CoverageBar({ label, value }: { label: string; value: number }) {
   )
 }
 
+function daysAgoLabel(dateStr: string): string {
+  const d = new Date(dateStr)
+  const now = new Date()
+  const diff = Math.floor((now.getTime() - d.getTime()) / (1000 * 60 * 60 * 24))
+  if (diff === 0) return '今天更新'
+  if (diff === 1) return '昨天更新'
+  return `${diff} 天前更新`
+}
+
 function MiniStat({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="glass-float rounded-xl p-4">
@@ -131,6 +143,7 @@ export default function Overview() {
   const [qualityDetail, setQualityDetail] = useState<any>(null)
   const [backtest, setBacktest] = useState<any>(null)
   const [loading, setLoading] = useState(false)
+  const [initialLoading, setInitialLoading] = useState(true)
   const [runProgress, setRunProgress] = useState<string | null>(null)
   const [runError, setRunError] = useState<string | null>(null)
 
@@ -151,6 +164,7 @@ export default function Overview() {
     setQuality(qualityData)
     setQualityDetail(qualityDetailData)
     setBacktest(backtestData)
+    setInitialLoading(false)
   }
 
   async function handleRun() {
@@ -216,6 +230,21 @@ export default function Overview() {
 
   const backtestResult = backtest || null
 
+  const backtestChartData = useMemo(() => {
+    if (!backtestResult?.records) return []
+    let nav = 1
+    let benchNav = 1
+    return backtestResult.records.map((r: any) => {
+      nav *= 1 + r.strategy_return / 100
+      benchNav *= 1 + r.benchmark_return / 100
+      return {
+        date: r.end_date,
+        策略: Math.round((nav - 1) * 10000) / 100,
+        沪深300: Math.round((benchNav - 1) * 10000) / 100,
+      }
+    })
+  }, [backtestResult])
+
   return (
     <motion.div
       variants={containerVariants}
@@ -260,7 +289,11 @@ export default function Overview() {
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="最新快照" value={snapshot?.date || '—'} icon={Calendar} />
+        {initialLoading ? (
+          <SkeletonStats count={4} />
+        ) : (
+          <>
+        <StatCard label="最新快照" value={snapshot?.date || '—'} subtext={snapshot?.date ? daysAgoLabel(snapshot.date) : undefined} icon={Calendar} />
         <StatCard
           label="候选股票"
           value={snapshot?.count?.toString() || '0'}
@@ -279,6 +312,8 @@ export default function Overview() {
           subtext={providerLabel}
           icon={Activity}
         />
+          </>
+        )}
       </div>
 
       <motion.div
@@ -337,6 +372,40 @@ export default function Overview() {
                 <p className="text-xs text-slate-500 mt-1">同池随机选股收益</p>
               </MiniStat>
             </div>
+
+            {backtestResult.records && backtestResult.records.length > 1 && (
+              <div className="mt-5 pt-5 border-t border-slate-800">
+                <div className="h-32">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={backtestChartData} margin={{ top: 4, right: 8, bottom: 4, left: 8 }}>
+                      <XAxis dataKey="date" tick={false} axisLine={false} />
+                      <YAxis tick={false} axisLine={false} width={0} domain={['auto', 'auto']} />
+                      <Tooltip
+                        contentStyle={{
+                          borderRadius: '10px',
+                          border: '1px solid rgba(148,163,184,0.15)',
+                          background: 'rgba(8,12,20,0.92)',
+                          backdropFilter: 'blur(12px)',
+                          color: '#f0f4f8',
+                          fontSize: '12px',
+                        }}
+                        formatter={(v: number) => [`${v.toFixed(2)}%`, '']}
+                      />
+                      <Line type="monotone" dataKey="策略" stroke="#38bdf8" strokeWidth={2} dot={false} />
+                      <Line type="monotone" dataKey="沪深300" stroke="#f0abfc" strokeWidth={1.5} dot={false} strokeDasharray="3 3" />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="flex items-center justify-center gap-6 mt-2">
+                  <span className="flex items-center gap-1.5 text-[10px] text-slate-500">
+                    <span className="w-3 h-0.5 bg-cyan-400 rounded-full" /> 策略
+                  </span>
+                  <span className="flex items-center gap-1.5 text-[10px] text-slate-500">
+                    <span className="w-3 h-0.5 bg-fuchsia-400 rounded-full" style={{ backgroundImage: 'repeating-linear-gradient(90deg, #f0abfc 0px, #f0abfc 3px, transparent 3px, transparent 6px)' }} /> 沪深300
+                  </span>
+                </div>
+              </div>
+            )}
             <p className="text-[10px] text-slate-600 mt-5 leading-relaxed">
               说明：基于历史快照逐日调仓，等权重买入 Top 20，价格已做后复权处理。由于当前仅积累了 {backtestResult.periods} 个交易日的快照，此回测仅反映极短期表现，不能代表策略长期有效性。
             </p>

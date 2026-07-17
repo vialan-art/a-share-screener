@@ -10,7 +10,7 @@ import threading
 import uuid
 
 from backend.database.connection import get_db, SessionLocal
-from backend.database.models import Stock, FinancialMetric, StockScore, DailySnapshot, UpdateLog, AppConfig, Portfolio, PortfolioNav
+from backend.database.models import Stock, FinancialMetric, StockScore, DailySnapshot, UpdateLog, AppConfig, Portfolio, PortfolioNav, StockPrice
 from backend.advisor.service import AIAdvisor
 from backend.pipeline import ScreenerPipeline
 from backend.core.config import Settings, get_settings
@@ -19,7 +19,6 @@ router = APIRouter()
 
 
 def _extract_reasons(data_json: Optional[str]) -> List[str]:
-    """从快照 data_json 中提取入选理由。"""
     if not data_json:
         return []
     try:
@@ -46,6 +45,17 @@ def _extract_reasons(data_json: Optional[str]) -> List[str]:
         return reasons[:3]
     except Exception:
         return []
+
+
+def _extract_signals(data_json: Optional[str]) -> Optional[dict]:
+    """从快照 data_json 中提取插件信号。"""
+    if not data_json:
+        return None
+    try:
+        data = json.loads(data_json)
+        return data.get("_plugin_signals") or None
+    except Exception:
+        return None
 
 
 # ponytail: in-memory job store for single uvicorn worker. Switch to Redis if scaled.
@@ -205,6 +215,7 @@ def get_latest_snapshot(
                 "debt_to_asset": i.debt_to_asset,
                 "dividend_yield": i.dividend_yield,
                 "_reasons": _extract_reasons(i.data_json),
+                "_signals": _extract_signals(i.data_json),
             }
             for i in items
         ],
@@ -240,6 +251,7 @@ def get_snapshot_by_date(date: str, db: Session = Depends(get_db)):
                 "debt_to_asset": i.debt_to_asset,
                 "dividend_yield": i.dividend_yield,
                 "_reasons": _extract_reasons(i.data_json),
+                "_signals": _extract_signals(i.data_json),
             }
             for i in items
         ],
@@ -311,6 +323,31 @@ def get_stock_detail(symbol: str, db: Session = Depends(get_db)):
             "passed_filters": latest_score.passed_filters if latest_score else None,
             "filter_reasons": latest_score.filter_reasons if latest_score else None,
         },
+    }
+
+
+@router.get("/stock/{symbol}/prices")
+def get_stock_prices(symbol: str, days: int = 60, db: Session = Depends(get_db)):
+    """获取个股近 N 个交易日收盘价走势。"""
+    rows = (
+        db.query(StockPrice)
+        .filter(StockPrice.symbol == symbol)
+        .order_by(StockPrice.trade_date.desc())
+        .limit(days)
+        .all()
+    )
+    rows = list(reversed(rows))
+    return {
+        "symbol": symbol,
+        "prices": [
+            {
+                "date": r.trade_date,
+                "close": r.adj_close or r.close,
+                "open": r.adj_open or r.open,
+                "volume": r.volume,
+            }
+            for r in rows
+        ],
     }
 
 
@@ -445,6 +482,9 @@ def get_latest_portfolio(top_n: int = 20, db: Session = Depends(get_db)):
         .limit(top_n)
         .all()
     )
+    metrics_map = {}
+    for m in db.query(FinancialMetric).filter(FinancialMetric.symbol.in_([i.symbol for i in items])).all():
+        metrics_map[m.symbol] = m
     return {
         "date": latest.portfolio_date,
         "items": [
@@ -454,6 +494,8 @@ def get_latest_portfolio(top_n: int = 20, db: Session = Depends(get_db)):
                 "industry": i.industry,
                 "total_score": i.total_score,
                 "weight": i.weight,
+                "change_pct": getattr(metrics_map.get(i.symbol), "change_pct", None),
+                "latest_price": getattr(metrics_map.get(i.symbol), "latest_price", None),
             }
             for i in items
         ],

@@ -73,6 +73,10 @@ export async function fetchQualityDetail() {
   return res.json()
 }
 
+export async function fetchStockPrices(symbol: string, days: number = 60) {
+  const res = await fetch(`${API_BASE}/stock/${symbol}/prices?days=${days}`)
+  return res.json()
+}
 
 export function getWatchlistDownloadUrl(): string {
   return `${API_BASE}/export/watchlist`
