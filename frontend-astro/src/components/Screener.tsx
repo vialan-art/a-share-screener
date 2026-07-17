@@ -241,6 +241,7 @@ export default function Screener() {
                 <option value="quality_score">质量分</option>
                 <option value="value_score">估值分</option>
                 <option value="stability_score">稳定分</option>
+                <option value="volatility_score">低波动</option>
                 <option value="momentum_score">动量分</option>
                 <option value="pe_ttm">PE 升序</option>
                 <option value="pb">PB 升序</option>
@@ -338,6 +339,9 @@ export default function Screener() {
                     <th className="px-4 py-4 text-right font-sans bg-slate-900 cursor-pointer select-none hover:text-slate-300 transition-colors" onClick={() => toggleSort('stability_score')}>
                       <span className="inline-flex items-center gap-1 justify-end">稳定 <SortIcon field="stability_score" /></span>
                     </th>
+                    <th className="px-4 py-4 text-right font-sans bg-slate-900 cursor-pointer select-none hover:text-slate-300 transition-colors" onClick={() => toggleSort('volatility_score')}>
+                      <span className="inline-flex items-center gap-1 justify-end">低波动 <SortIcon field="volatility_score" /></span>
+                    </th>
                     <th className="px-4 py-4 text-right font-sans bg-slate-900 cursor-pointer select-none hover:text-slate-300 transition-colors" onClick={() => toggleSort('momentum_score')}>
                       <span className="inline-flex items-center gap-1 justify-end">动量 <SortIcon field="momentum_score" /></span>
                     </th>
@@ -389,6 +393,9 @@ export default function Screener() {
                       </td>
                       <td className="px-4 py-4 text-right font-mono text-sm text-slate-400">
                         {item.stability_score?.toFixed(2) || '-'}
+                      </td>
+                      <td className="px-4 py-4 text-right font-mono text-sm text-slate-400">
+                        {item.volatility_score?.toFixed(2) || '-'}
                       </td>
                       <td className="px-4 py-4 text-right font-mono text-sm text-slate-400">
                         {item.momentum_score.toFixed(2)}

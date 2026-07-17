@@ -88,6 +88,7 @@ class StockScore(Base):
     value_score = Column(Float, comment="估值分")
     momentum_score = Column(Float, comment="动量分")
     stability_score = Column(Float, comment="增长稳定分")
+    volatility_score = Column(Float, comment="低波动分")
     total_score = Column(Float, comment="综合得分")
 
     passed_filters = Column(Boolean, comment="是否通过及格线")
@@ -108,6 +109,7 @@ class DailySnapshot(Base):
     value_score = Column(Float)
     momentum_score = Column(Float)
     stability_score = Column(Float)
+    volatility_score = Column(Float)
     pe_ttm = Column(Float)
     pb = Column(Float)
     roe = Column(Float)

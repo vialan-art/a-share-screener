@@ -526,6 +526,8 @@ class AkShareProvider:
             "股票简称": "name",
             "报告期": "report_period",
             "每股收益": "eps",
+            "营业总收入-营业总收入": "revenue_yuan",
+            "营业总收入-同比增长": "revenue_growth",
             "营业收入-营业收入": "revenue_yuan",
             "营业收入-同比增长": "revenue_growth",
             "净利润-净利润": "net_profit_yuan",

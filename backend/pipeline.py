@@ -197,11 +197,46 @@ class ScreenerPipeline:
                     print(error_msg)
                     stats["errors"].append(error_msg)
 
-            # 6. 评分
+            # 6. 评分（先计算价格动量/波动率）
             stage_start = datetime.utcnow()
             _progress("[6/6] 运行评分...")
             print("[6/6] 运行评分...")
-            score_results = self.scoring_engine.score_batch(passed_stocks, metrics_map)
+
+            # 从价格历史计算真实动量和波动率
+            momentum_map = {}
+            volatility_map = {}
+            if self.use_plugins and passed_stocks:
+                try:
+                    plugin_data = PluginDataService(db)
+                    symbols_for_mom = [s["symbol"] for s in passed_stocks]
+                    ohlcv_for_mom = plugin_data.fetch_batch(symbols_for_mom, days=150)
+                    for sym, ohlcv in ohlcv_for_mom.items():
+                        if not ohlcv or len(ohlcv) < 5:
+                            continue
+                        closes = [r["close"] for r in ohlcv]
+                        # 动量：N日前到现在
+                        mom = {}
+                        for period, days in [("20d", 20), ("60d", 60), ("120d", 120)]:
+                            if len(closes) > days:
+                                mom[period] = (closes[-1] / closes[-1 - days]) - 1
+                            else:
+                                mom[period] = None
+                        momentum_map[sym] = mom
+                        # 日收益率序列（用于波动率）
+                        daily_rets = []
+                        for i in range(1, len(closes)):
+                            if closes[i - 1] > 0:
+                                daily_rets.append((closes[i] / closes[i - 1]) - 1)
+                        volatility_map[sym] = daily_rets[-60:]  # 最近60日
+                    print(f"[6/6] 价格动量覆盖 {len(momentum_map)}/{len(symbols_for_mom)} 只")
+                except Exception as e:
+                    print(f"[6/6] 价格动量计算失败: {e}")
+
+            score_results = self.scoring_engine.score_batch(
+                passed_stocks, metrics_map,
+                momentum_map=momentum_map,
+                volatility_map=volatility_map,
+            )
             stats["stage_times"]["scoring"] = (datetime.utcnow() - stage_start).total_seconds()
             _progress(f"[6/6] 完成，评分 {len(score_results)} 只股票")
             print(f"[6/6] 完成，评分 {len(score_results)} 只股票")
@@ -215,6 +250,7 @@ class ScreenerPipeline:
                     value_score=sr.value_score,
                     momentum_score=sr.momentum_score,
                     stability_score=sr.stability_score,
+                    volatility_score=getattr(sr, 'volatility_score', None),
                     total_score=sr.total_score,
                     passed_filters=True,
                     filter_reasons="[]",
@@ -261,6 +297,7 @@ class ScreenerPipeline:
                     value_score=sr.value_score,
                     momentum_score=sr.momentum_score,
                     stability_score=sr.stability_score,
+                    volatility_score=getattr(sr, 'volatility_score', None),
                     pe_ttm=metrics.get("pe_ttm"),
                     pb=metrics.get("pb"),
                     roe=metrics.get("roe"),
