@@ -98,6 +98,20 @@ def _execute_pipeline(jid: str):
         pipeline = ScreenerPipeline(provider_name=provider_name)
         _set_job(jid, progress="开始拉取数据...")
         result = pipeline.run(db, max_stocks=max_stocks, progress_callback=lambda msg: _set_job(jid, progress=msg))
+
+        # pipeline 成功后，预热价格缓存并更新 NAV
+        try:
+            _set_job(jid, progress="预热价格缓存...")
+            from backend.data.price_service import PriceService
+            from backend.scheduler.daily_job import _update_portfolio_nav
+            price_service = PriceService(db)
+            price_service.warm_cache_for_snapshot(top_n=20, years=3)
+            price_service.warm_cache_for_all_snapshots(top_n=20, years=3)
+            _set_job(jid, progress="更新组合净值...")
+            _update_portfolio_nav(db)
+        except Exception as e:
+            print(f"价格预热/NAV 更新失败: {e}")
+
         _set_job(jid, status="success", progress="完成", result=result)
     except Exception as e:
         _set_job(jid, status="failed", progress="失败", error=str(e))
